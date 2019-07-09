@@ -1,0 +1,8 @@
+numpy>=1.15.2
+scipy>=1.1.0
+optlang>=1.4.3
+pandas>=0.23.4
+nltk>=3.2.5
+pyparsing>=2.2.0
+sbtab>=0.9.49
+matplotlib>=3.0.0

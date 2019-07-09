@@ -1,0 +1,5 @@
+Glucose <=> 2 Ethanol + 2 CO2
+O2 + 2 NADH <=> 2 NAD+ + 2 H2O
+ATP + H2O <=> ADP + Phosphate
+Acetate <=> Ethanol
+
