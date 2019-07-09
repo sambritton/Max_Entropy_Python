@@ -314,27 +314,6 @@ metabolites = pd.DataFrame(index = S_active.columns, columns=[conc,variable])
 metabolites[conc] = 0.001
 metabolites[variable] = True
 
-1.98E-01
-8.50E-02
-3.53E-35
-1.30E+01
-1.56E+00
-4.18E-05
-7.41E-07
-3.18E-01
-9.60E-02
-3.80E-03
-1.00E-05
-1.00E-03
-1.00E-58
-1.00E-05
-1.01E-02
-8.30E-04
-2.00E-02
-1.00E-04
-55
-2.60E-03
-
 metabolites.loc['2-PHOSPHO-D-GLYCERATE:CYTOSOL', conc] = 1.98E-01
 metabolites.loc['PHOSPHOENOLPYRUVATE:CYTOSOL', conc] = 8.50E-02
 metabolites.loc['OXALOACETATE:CYTOSOL', conc] = 3.53E-35
@@ -346,15 +325,26 @@ metabolites.loc['D-FRUCTOSE_6-PHOSPHATE:CYTOSOL', conc] = 3.18E-01
 metabolites.loc['D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL', conc] = 9.60E-02
 metabolites.loc['BETA-D-GLUCOSE-6-PHOSPHATE:CYTOSOL', conc] = 3.80E-03
 metabolites.loc['PYRUVATE:CYTOSOL', conc] = 1.00E-05
+
 metabolites.loc['(S)-MALATE:CYTOSOL', conc] = 1.00E-03
+metabolites.loc['(S)-MALATE:CYTOSOL',variable] = False 
 metabolites.loc['BETA-D-GLUCOSE:CYTOSOL', conc] = 1.00E-58
+metabolites.loc['BETA-D-GLUCOSE:CYTOSOL',variable] = False 
 metabolites.loc['ADP:CYTOSOL', conc] = 1.00E-05
+metabolites.loc['ADP:CYTOSOL',variable] = False 
+
 metabolites.loc['ATP:CYTOSOL', conc] = 1.01E-02
+metabolites.loc['ATP:CYTOSOL',variable] = False 
 metabolites.loc['NADH:CYTOSOL', conc] = 8.30E-04
+metabolites.loc['NADH:CYTOSOL',variable] = False 
 metabolites.loc['ORTHOPHOSPHATE:CYTOSOL', conc] = 2.00E-02
+metabolites.loc['ORTHOPHOSPHATE:CYTOSOL',variable] = False 
 metabolites.loc['CO2:CYTOSOL', conc] = 1.00E-04
+metabolites.loc['CO2:CYTOSOL',variable] = False 
 metabolites.loc['H2O:CYTOSOL', conc] = 55
+metabolites.loc['H2O:CYTOSOL',variable] = False 
 metabolites.loc['NAD+:CYTOSOL', conc] = 2.60E-03
+metabolites.loc['NAD+:CYTOSOL',variable] = False 
 #%%
 nvariables = metabolites[metabolites[variable]].count()
 nvar = nvariables[variable]
@@ -471,7 +461,7 @@ A = max_entropy_functions.calc_A(res_lsq1.x,f_log_counts, S_mat, Jac, E_regulati
 [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
 
 desired_conc=6.022140900000000e+05
-React_Choice=15
+React_Choice=1
 
 newE = max_entropy_functions.calc_reg_E_step(E_regulation,React_Choice, nvar, res_lsq1.x, f_log_counts, desired_conc, 
                        S_mat, A, rxn_flux,KQ_f,True, has_been_up_regulated)
@@ -493,11 +483,9 @@ display(reaction_choice)
 #%% Learn theta_linear
 
 #GLYCOLYSIS_TCA_GOGAT gamma=0.75, m=1, lop=10, epsilon greedy
-theta_linear = np.array([ 0.09725439,  0.34698425, -0.29341482,  0.34821799, -0.01373226,
-        0.34649478,  0.3482523 ,  0.34180654,  0.34827326,  0.34631839,
-       -0.29756751, -0.12909941,  0.34124191,  0.34739644,  0.34697695,
-        0.34783055, -0.29665743, -0.29626672,  0.34665073, -0.2974187 ,
-        0.34656399])
+theta_linear = np.array([ 0.65071853,  0.39740525,  2.07639527,  0.39709477,  0.12606229,
+       -0.37766263,  0.39673707, -0.37495336, -0.3761415 ,  0.90798741,
+        0.17654277])
 
 #%%
     
