@@ -20,6 +20,7 @@ from PIL import Image
 import matplotlib.image as mpimg
 from IPython.display import display
 
+import time
 import sys
 
 cwd = os.getcwd()
@@ -246,9 +247,6 @@ if (0):
     dG0_prime, dG0_uncertainty = eq_api.dG0_prime_multi(rxn_list)
     display(dG0_prime)
 
-reactions.loc['PYRt2m',deltag0] = -RT*np.log(10)
-display(reactions)
-
 # From Elad Noor regarding pyruvate => pyruvate reaction:
 # Sorry for the delayed response. For formation energies you should use the function Compound.dG0_prime(). Here is some example code:
 #    cm = CompoundMatcher()
@@ -259,19 +257,6 @@ display(reactions)
 #Regarding the compartments, the uncertainty does not depend on the aqueous conditions, and neither does the covariance between the uncertainty. Therefore, you can calculate all compartments at once or separately, it should not make a difference.
 
 
-# ### Determine Pyruvate transport reaction manually
-
-# In[ ]:
-
-
-#Why do we set these 
-reactions.loc['PYRt2m',deltag0] = -RT*np.log(10)
-reactions.loc['PYRt2m',deltag0_sigma] = 0
-
-reactions.loc['SUCD1m',deltag0] = 0
-
-
-# ### Output the Standard Reaction Free Energies for use in a Boltzmann Simulation
 
 # In[ ]:
 
@@ -304,10 +289,7 @@ reaction_file.close()
 
 # ## Set Fixed Concentrations/Boundary Conditions
 
-# In[10]:
-
-
-
+#%% Initial metabolites concentrations and fixed metabolits
 conc = 'Conc'
 variable = 'Variable'
 metabolites = pd.DataFrame(index = S_active.columns, columns=[conc,variable])
@@ -321,14 +303,20 @@ metabolites.loc['3-PHOSPHO-D-GLYCERATE:CYTOSOL', conc] = 1.30E+01
 metabolites.loc['3-PHOSPHO-D-GLYCEROYL_PHOSPHATE:CYTOSOL', conc] = 1.56E+00
 metabolites.loc['GLYCERONE_PHOSPHATE:CYTOSOL', conc] = 4.18E-05
 metabolites.loc['D-GLYCERALDEHYDE-3-PHOSPHATE:CYTOSOL', conc] = 7.41E-07
+
 metabolites.loc['D-FRUCTOSE_6-PHOSPHATE:CYTOSOL', conc] = 3.18E-01
+#metabolites.loc['D-FRUCTOSE_6-PHOSPHATE:CYTOSOL', variable] = False
+
 metabolites.loc['D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL', conc] = 9.60E-02
+#metabolites.loc['D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL', variable] = False
 metabolites.loc['BETA-D-GLUCOSE-6-PHOSPHATE:CYTOSOL', conc] = 3.80E-03
+#metabolites.loc['BETA-D-GLUCOSE-6-PHOSPHATE:CYTOSOL', variable] = False
 metabolites.loc['PYRUVATE:CYTOSOL', conc] = 1.00E-05
+#metabolites.loc['PYRUVATE:CYTOSOL', variable] = False
 
 metabolites.loc['(S)-MALATE:CYTOSOL', conc] = 1.00E-03
 metabolites.loc['(S)-MALATE:CYTOSOL',variable] = False 
-metabolites.loc['BETA-D-GLUCOSE:CYTOSOL', conc] = 1.00E-58
+metabolites.loc['BETA-D-GLUCOSE:CYTOSOL', conc] = 1.00E-8
 metabolites.loc['BETA-D-GLUCOSE:CYTOSOL',variable] = False 
 metabolites.loc['ADP:CYTOSOL', conc] = 1.00E-05
 metabolites.loc['ADP:CYTOSOL',variable] = False 
@@ -346,6 +334,9 @@ metabolites.loc['H2O:CYTOSOL',variable] = False
 metabolites.loc['NAD+:CYTOSOL', conc] = 2.60E-03
 metabolites.loc['NAD+:CYTOSOL',variable] = False 
 #%%
+if (S_matrix.index != reactions.index).any():
+    print("ERROR")
+    time.sleep(10.0)
 nvariables = metabolites[metabolites[variable]].count()
 nvar = nvariables[variable]
 
@@ -371,7 +362,6 @@ Sactive_index = S_active.index
 #Sactive_columns = S_active.columns
 active_reactions.reindex(index = Sactive_index, copy = False)
 S_active = S_active.reindex(columns = metabolites.index, copy = False)
-S_active['H2O:MITOCHONDRIA'] = 0
 S_active['H2O:CYTOSOL'] = 0
 
 #####################################
@@ -412,7 +402,6 @@ delta_increment_for_small_concs = (10**-50)*np.zeros(metabolites['Conc'].values.
 mu0 = 1 #Dummy parameter for now; reserved for free energies of formation
 
 #%% Basic test
-import max_entropy_functions
 
 variable_concs_begin = np.array(metabolites['Conc'].iloc[0:nvar].values, dtype=np.float64)
 v_log_counts = np.log(variable_concs_begin*Concentration2Count)
@@ -449,11 +438,11 @@ begin_log_metabolites = np.append(res_lsq1.x,f_log_counts)
 
 E_regulation = np.ones(Keq_constant.size) # THis is the vector of enzyme activities, Range: 0 to 1.
 log_metabolites = np.append(res_lsq1.x,f_log_counts)
-KQ_f = max_entropy_functions.odds(log_metabolites,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
+KQ_f = max_entropy_functions.odds(log_metabolites,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant)
 
 
-Keq_inverse = np.power(Keq_constant,-1);
-KQ_r = max_entropy_functions.odds(log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
+Keq_inverse = np.power(Keq_constant,-1)
+KQ_r = max_entropy_functions.odds(log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1)
 
 [RR,Jac] = max_entropy_functions.calc_Jac2(res_lsq1.x, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
 A = max_entropy_functions.calc_A(res_lsq1.x,f_log_counts, S_mat, Jac, E_regulation )
@@ -461,7 +450,7 @@ A = max_entropy_functions.calc_A(res_lsq1.x,f_log_counts, S_mat, Jac, E_regulati
 [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
 
 desired_conc=6.022140900000000e+05
-React_Choice=1
+React_Choice=6
 
 newE = max_entropy_functions.calc_reg_E_step(E_regulation,React_Choice, nvar, res_lsq1.x, f_log_counts, desired_conc, 
                        S_mat, A, rxn_flux,KQ_f,True, has_been_up_regulated)
@@ -488,9 +477,6 @@ theta_linear = np.array([ 0.65071853,  0.39740525,  2.07639527,  0.39709477,  0.
         0.17654277])
 
 #%%
-    
-import machine_learning_functions
-
 gamma = 0.75
 num_samples = 1 #number of state samples theta_linear attempts to fit to in a single iteration
 length_of_path = 10 #length of path after 1 forced step
