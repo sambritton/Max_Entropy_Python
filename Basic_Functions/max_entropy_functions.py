@@ -390,8 +390,8 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
             newE1 = E
         
         if (method == 1):
-            print("delta_S_val_method1")
-            print(delta_S_val_method1)
+            #print("delta_S_val_method1")
+            #print(delta_S_val_method1)
             if(delta_S_val_method1 > 0.05):
                 print("using E/2")
                 print(delta_S_val_method1)

@@ -282,7 +282,7 @@ reactions.loc['SUCD1m',deltag0] = 0
 #%%
 # ### Output the Standard Reaction Free Energies for use in a Boltzmann Simulation
 #reaction_file = open('neurospora_aerobic_respiration.keq', 'w')
-reaction_file = open('TCA_PPP_GLYCOLYSIS_GOGAT_CELLWALL\\TCA_PPP_Glycolysis.keq', 'w')
+reaction_file = open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\TCA_PPP_Glycolysis.keq', 'w')
 for y in reactions.index:
     print('%s\t%e' % (y, np.exp(-reactions.loc[y,'DGZERO']/RT)),file=reaction_file)
 reaction_file.close()    
@@ -559,14 +559,20 @@ display(reaction_choice)
   
 #%% Learn theta_linear
 
-#TCA_PPP_Glycolysis_WithGOGAT gamma=0.75, m=1, lop=10, epsilon greedy
-theta_linear=np.array([-0.05589037, -0.11495258,  0.06004139, -0.07742707,  0.34146066,
-        0.3143224 ,  0.29013037,  0.02585411, -0.10858042, -0.07802809,
-        0.01477308,  0.00566785, -0.0767125 ,  0.35757632,  0.20532038,
-        0.19832718,  0.38180135, -0.05685418,  0.35897034,  0.01235165,
-        0.01266437, -0.13836959,  0.07434897,  0.25449561,  0.07286417,
-        0.37451755, -0.09469322,  0.38749446,  0.03628784,  0.11481878,
-       -0.00058109])
+#TCA_PPP_Glycolysis_cell wall without gogat gamma=0.75, m=1, lop=10, epsilon greedy
+#Delta_S value function
+theta_linear=np.array([ 0.210013  ,  0.01949418, -0.12566511,  0.09996117,  0.15719931,
+        0.17879126,  0.16852339,  0.0726833 , -0.0174334 , -0.00031908,
+       -0.09552648, -0.08953069, -0.00362727,  0.05174328, -0.14141594,
+        0.06749798,  0.00236211,  0.04920843, -0.16593684,  0.07778623,
+        0.17829143,  0.11223961, -0.05529051, -0.01206809, -0.0372327 ,
+       -0.13892892, -0.13750913, -0.12112517,  0.00098687, -0.15174624,
+       -0.00398624, -0.00507546,  0.09306657,  0.02464172, -0.11022116,
+        0.00132381,  0.00683007,  0.0207841 , -0.04812656,  0.050641  ,
+       -0.02067271,  0.01339449, -0.15572199, -0.16068112,  0.01487923,
+        0.03619071,  0.08584804,  0.28425137])
+    
+#EPR value function
 #%%
     
 import machine_learning_functions
@@ -594,6 +600,7 @@ machine_learning_functions.num_rxns = Keq_constant.size
 machine_learning_functions.num_samples = num_samples
 machine_learning_functions.length_of_path = length_of_path
 
+#%%
 updates = 2500 #attempted iterations to update theta_linear
 v_log_counts = v_log_counts_stationary.copy()
 for update in range(0,updates):
@@ -813,10 +820,10 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
     print("entropy_production_rate")
     print(epr)
     print(np.max(rxn_flux))
-    #if (np.max(rxn_flux) < 7.17450933):
-    #    break
 
     i = i+1
+
+
 final_choices2=final_choices2[0:i]
 epr_vector_method_2=epr_vector_method_2[0:i]
 opt_concs2 = v_log_counts

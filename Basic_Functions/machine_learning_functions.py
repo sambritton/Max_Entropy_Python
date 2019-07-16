@@ -7,7 +7,7 @@ Created on Mon Jul  8 13:48:04 2019
 
 #%% Learning Test
 
-##Terms::::::::::::::::::::::::::::::::::::::::::::::::::
+##Terms::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 #States: defined by how much each rxn is regulated (vector of 21 floats from 0-1)
 #Action: defined by which rxn we choose to regulate. 
 #Policy: function S_mat->A (each )
@@ -44,7 +44,7 @@ def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
     KQ_f_reg = E_Regulation * KQ_f
     KQ_r_reg = E_Regulation * KQ_r
     sumOdds = np.sum(KQ_f_reg) + np.sum(KQ_r_reg)
-    epr = +np.sum(KQ_f_reg * max_entropy_functions.safe_ln(KQ_f_reg))/sumOdds + np.sum(KQ_r_reg * max_entropy_functions.safe_ln(KQ_r_reg))/sumOdds
+    epr = +np.sum(KQ_f_reg * np.log(KQ_f_reg))/sumOdds + np.sum(KQ_r_reg * np.log(KQ_r_reg))/sumOdds
     return epr
 
     #old matlab code
@@ -54,13 +54,28 @@ def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
     #entropy_production_rate = -sum(KQ_reg.*log(KQ(active)))/sumOdds - sum(KQ_inverse_reg.*log(KQ_inverse(active)))/sumOdds;
 
 #try theta_linear * (entropy production rate)
+
+#Physically this is trying to minimizing the free energy change in each reaction. 
 def state_value(theta_linear, delta_s, KQ_f, KQ_r, E_Regulation):
-    epr = entropy_production_rate(KQ_f, KQ_r, E_Regulation)
+    #epr = entropy_production_rate(KQ_f, KQ_r, E_Regulation)
+    KQ_f_reg = E_Regulation * KQ_f
+    KQ_r_reg = E_Regulation * KQ_r
+    #sumOdds = np.sum(KQ_f_reg) + np.sum(KQ_r_reg)
+    norm_LR = np.sum(theta_linear * KQ_f_reg/np.sum(KQ_f_reg) * np.log(KQ_f_reg))
+    norm_RL = np.sum(theta_linear * KQ_r_reg/np.sum(KQ_r_reg) * np.log(KQ_r_reg))
+   
     
+    
+    val = norm_LR + norm_RL
+    
+    #print("norm_LR")
+    #print(norm_LR)
+    #print("norm_RL")
+    #rint(norm_RL)
     #NOTE CLEAR WHICH TO USE
-    val = np.sum(theta_linear * (-epr))
-    #val = -np.sum(theta_linear * (delta_s))
-    return val
+    #val = np.sum(theta_linear * (-epr))
+    #val = np.sum(theta_linear * (-delta_s))
+    return -val
 
 #define reward as entropy production rate
 def reward_value(KQ_f, KQ_r, E_Regulation):
@@ -68,11 +83,11 @@ def reward_value(KQ_f, KQ_r, E_Regulation):
     return val
 
      
-def fun_opt_theta(theta_linear,state_delta_s_matrix, target_value_vec, m,KQ_f_matrix, KQ_r_matrix, state_sample_matrix):
+def fun_opt_theta(theta_linear,state_delta_s_matrix, target_value_vec, KQ_f_matrix, KQ_r_matrix, state_sample_matrix):
     
     #breakpoint()
     totalvalue=0
-    for sample in range(0,m):
+    for sample in range(0,num_samples):
         delta_s = state_delta_s_matrix[:,sample].copy()
         KQ_f = KQ_f_matrix[:,sample].copy()
         KQ_r = KQ_r_matrix[:,sample].copy()
@@ -242,7 +257,8 @@ def update_theta( theta_linear, v_log_counts_static, *args):
     #using all samples we compare how our value function matches, and update 
     #theta_linear accordingly. 
     #theta_linear = theta_linear + 0.01*()
-    res_min = minimize(fun_opt_theta, theta_linear, method='nelder-mead', args=(state_delta_s_matrix, estimate_value_vec, num_samples, KQ_f_matrix, KQ_r_matrix, state_sample_matrix))
+    #breakpoint()
+    res_min = minimize(fun_opt_theta, theta_linear, method='nelder-mead', args=(state_delta_s_matrix, estimate_value_vec, KQ_f_matrix, KQ_r_matrix, state_sample_matrix))
          
     return res_min.x  
 
@@ -278,7 +294,7 @@ def policy_function(state, theta_linear, v_log_counts_path, *args ):
     reaction_size_to_regulate = num_rxns
     init_action_val = -np.inf
     action_choice=1
-    #breakpoint()
+    
     for act in range(0,reaction_size_to_regulate):
         #print("in policy_function action loop")
         #print("v_log_counts")
@@ -315,15 +331,30 @@ def policy_function(state, theta_linear, v_log_counts_path, *args ):
             print(React_Choice) 
             print("v_log_counts")
             print(v_log_counts)
-            print("new_v_log_counts")
-            print(new_v_log_counts)
-        
+
+        #trial_state_sample * KQ_f_new = KQ_f_reg relation to KQ_f??
+        #take smallest option after regulation
         if (action_value > init_action_val):
             init_action_val = action_value
             action_choice = act
+
+            #KQ_f_reg = trial_state_sample * KQ_f_new
+            #KQ_r_reg = trial_state_sample * KQ_r_new
+            #sumOdds = np.sum(KQ_f_reg) + np.sum(KQ_r_reg)    
+            #norm_LR = np.sum(theta_linear * KQ_f_reg/np.sum(KQ_f_reg) * np.log(KQ_f_reg))
+            #norm_RL = np.sum(theta_linear * KQ_r_reg/np.sum(KQ_r_reg) * np.log(KQ_r_reg))
+
+            #breakpoint()
             #print("act")
-            #print("state")
-            #print(state)
+            #print(action_choice)
+            #print("action_value")
+            #print(action_value) 
+            #print("value_current_state")
+            #print(value_current_state)
+            #print("sumOdds")
+            #print(norm_LR)
+            #print(KQ_f_reg * np.log(KQ_f_reg))
+            #print(KQ_r_reg * np.log(KQ_r_reg))
     
     rxn_choices.remove(action_choice)
     random_choice = random.choice(rxn_choices)
