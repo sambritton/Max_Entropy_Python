@@ -48,7 +48,7 @@ def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_conc
 
 # In[ ]:
 
-
+#WARNING: FUNCTION SCALES RXN_FLUX USING E_REGULATION VALUES
 def oddsDiff(log_vcounts, log_fcounts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, E_Regulation):
     
     log_metabolites = np.append(log_vcounts,log_fcounts)
@@ -134,7 +134,7 @@ def conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR):
 def calc_deltaS(log_vcounts, log_fcounts, S_mat, KQ):
     #vcounts = np.exp(log_vcounts)
     #fcounts = np.exp(log_fcounts)
-    
+    #breakpoint()
     target_log_vcounts = np.ones(len(log_vcounts)) * np.log(0.001*6.022140857e+23*1.0e-15)
     log_target_metabolite = np.append(target_log_vcounts, log_fcounts)
     log_metabolite = np.append(log_vcounts, log_fcounts)
@@ -172,7 +172,7 @@ def calc_delaS_metab(v_log_counts, *args):
     #initialize
     target_v_log_counts = np.ones(len(v_log_counts))
     if (nargin < 1):
-        target_v_log_counts = np.ones(len(v_log_counts)) * np.log(0.001*6.022140857e+23*1.0e-15);
+        target_v_log_counts = np.ones(len(v_log_counts)) * np.log(6.022140900000000e+05);
     else:
         target_v_log_counts = varargin;
     
@@ -190,12 +190,14 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
     reaction_choice=-1
     
     down_regulate = True
+    
+    threshold = 1e-7
     #take positive and negative indices in metabolite errors
-    S_index, = np.where(delta_S > 0.0) 
-    sm_idx, = np.where(delta_S_metab > 0.0) #reactions that have bad values 
+    S_index, = np.where(delta_S > threshold) 
+    sm_idx, = np.where(delta_S_metab > threshold) #reactions that have bad values 
 
-    S_index_neg, = np.where(delta_S < 0.0) 
-    sm_idx_neg, = np.where(delta_S_metab < 0.0) #reactions that have bad values 
+    S_index_neg, = np.where(delta_S < threshold) 
+    sm_idx_neg, = np.where(delta_S_metab < threshold) #reactions that have bad values 
     
     if ( (S_index.size!=0) and (sm_idx.size!=0 ) and (S_index_neg.size !=0) and (sm_idx_neg.size !=0) ):
         
@@ -211,6 +213,7 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
             temp = ccc[np.ix_(row_index, col_index) ]
             temp_id = (temp > 0) #ccc>0 means derivative is positive (dlog(conc)/dlog(activity)>0) 
         
+            #double check outer product
             temp_neg = ccc[np.ix_(row_index_neg, col_index_neg) ]
             temp_id_neg = (temp_neg > 0)
             
@@ -257,8 +260,8 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
             #print("delta_S")
             #print(delta_S)
                 
-            temp = ccc[np.ix_(sm_idx,S_index)]#np.ix_ does outer product
-            temp_neg = ccc[np.ix_(sm_idx_neg ,S_index_neg)]#np.ix_ does outer product
+            temp = ccc[ np.ix_(sm_idx,S_index) ]#np.ix_ does outer product
+            temp_neg = ccc[ np.ix_(sm_idx_neg ,S_index_neg) ]#np.ix_ does outer product
             #print("temp")
             #print(temp)
                 
@@ -312,6 +315,7 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
                     log_fcounts,desired_conc,S_mat, A, rxn_flux,KQ,
                     use_abs_step, has_been_up_regulated,
                     *args):
+        
     
     varargin = args
     nargin = len(varargin)
@@ -363,6 +367,7 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
             dx_j = metabolite_counts[prod_indices[i] ] - desired_conc;#same as delta_S
             x_j_eq = metabolite_counts[ prod_indices[i] ];
     
+
             TEMP=(S_T[0:len(vcounts),React_Choice])*(rxn_flux[React_Choice]) 
     
             TEMP2=np.matmul(-B[prod_index,:],  TEMP )
@@ -370,32 +375,44 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
             deltaE = E * (dx_j/x_j_eq) * TEMP2
             #print("DELTA_E")
             #print(deltaE)
-            
+            if (desired_conc > metabolite_counts[prod_indices[i] ]):
+                #then there is no need to regulate
+                #print("no need to regulate reaction: ")
+                #print(React_Choice)
+                
+                deltaE=0
+                
             E_choices[i] = deltaE;
-            
+        #breakpoint()
+        #print(E_choices)
         #finallly, choose one of them
         idx = np.argmax(E_choices)
         #display("idx")
         #display(idx)
         delta_E_Final = E_choices[idx]
-        
+        #breakpoint()
         newE1 = E - (delta_E_Final)
-        
+        #print("E_choices")
+        #print(E_choices)
 
         if ((newE1 < 0) or (newE1 > 1.0)):
             #reset if out of bounds          
-            #print("*********************************************************")
-            #print("BAD ACTIVITY STEP CHOICE")
-            #print(newE1)
+            print("*********************************************************")
+            print("BAD ACTIVITY STEP CHOICE")
+            print(newE1)
             newE1 = E
         
         if (method == 1):
             #print("delta_S_val_method1")
             #print(delta_S_val_method1)
-            if(delta_S_val_method1 > 0.05):
+            if(delta_S_val_method1 > 0.15):
                 print("using E/2")
                 print(delta_S_val_method1)
-                newE1 = E - E*(5/10);
+                newE_mca = E-deltaE
+                
+                newE = E - E*(5/10)
+                if (( newE_mca < newE) and (newE_mca>0)):
+                    newE=newE_mca
             elif (use_abs_step==True):
                 newE1 = E - abs(delta_E_Final)
                 #newE1 = E - E*(5/10);
@@ -403,3 +420,4 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
                 newE1 = E - (delta_E_Final)         
     
     return newE1
+
