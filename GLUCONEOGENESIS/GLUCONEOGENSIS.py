@@ -550,8 +550,9 @@ optimizer = torch.optim.Adam(nn_model.parameters(), lr=alpha)
 theta_linear=[]
 updates = 25000 #attempted iterations to update theta_linear
 v_log_counts = v_log_counts_stationary.copy()
+episodic_loss = np.zeros(updates)
 episodic_reward = np.zeros(updates)
-epsilon_greedy = 0.05
+epsilon_greedy = 0.0
 
 n_back_step = 1 #these steps use rewards. Total steps before n use state values
 threshold=500
@@ -583,15 +584,18 @@ for update in range(0,updates):
     #update with step-size is already performed, just use new theta values
     #breakpoint()
     threshold=threshold/2.0
-    sum_reward = machine_learning_functions.update_theta_SGD_TD(threshold,nn_model,loss_fn, optimizer, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
+    [sum_reward, average_loss] = machine_learning_functions.update_theta_SGD_TD(threshold,nn_model,loss_fn, optimizer, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
     print("TOTAL REWARD")
     print(sum_reward)
+    print("ave loss")
+    print(average_loss)
     #breakpoint()
     #print(list(nn_model.parameters()))
     #print("**********************************************************************")
     #print("EPISODE FINISHED")
     #print("sum")
     #print(sum_reward)
+    episodic_loss[update]=average_loss
     episodic_reward[update]=sum_reward
     #print("endSum")
     #print(list(nn_model.parameters()))

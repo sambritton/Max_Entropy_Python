@@ -556,7 +556,7 @@ machine_learning_functions.length_of_path = length_of_path
 
 #%%
 import torch
-N, D_in, H, D_out = 1, Keq_constant.size,  2*Keq_constant.size, 1
+N, D_in, H, D_out = 1, Keq_constant.size,  Keq_constant.size, 1
 
 # Create random Tensors to hold inputs and outputs
 x_in = torch.zeros(N, D_in)
@@ -568,7 +568,7 @@ y = torch.randn(1,1, D_out)
 
 # =============================================================================
 # nn_model = torch.nn.Sequential(
-#         torch.nn.Linear(D_in, H),
+#         torch.nn.Linear(D_in, 200),
 #                 
 #         torch.nn.ReLU(),
 #         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=2, padding=0),
@@ -578,25 +578,31 @@ y = torch.randn(1,1, D_out)
 #         torch.nn.ReLU(),
 #         torch.nn.MaxPool1d(2),
 #         
-#         torch.nn.Linear(61, D_out)
+#         torch.nn.Linear(23, D_out)
 #         )
 # =============================================================================
 
 nn_model = torch.nn.Sequential(
         torch.nn.Linear(D_in, H),
-        torch.nn.ReLU(),
+        torch.nn.LeakyReLU(),
         torch.nn.Linear(H, D_out))
+# =============================================================================
+# 
+# nn_model = torch.nn.Sequential(
+#         torch.nn.Linear(D_in, D_out))
+# =============================================================================
 
 loss_fn = torch.nn.MSELoss(reduction='sum')
-alpha = 0.001
+alpha = 0.0001
 print(list(nn_model.parameters()))           
 optimizer = torch.optim.Adam(nn_model.parameters(), lr=alpha)
 #%% SGD UPDATE TEST
 theta_linear=[]
 updates = 25000 #attempted iterations to update theta_linear
 v_log_counts = v_log_counts_stationary.copy()
+episodic_loss = np.zeros(updates)
 episodic_reward = np.zeros(updates)
-epsilon_greedy = 0.05
+epsilon_greedy = 0.0
 
 n_back_step = 8 #these steps use rewards. Total steps before n use state values
 threshold=500
@@ -609,31 +615,38 @@ for update in range(0,updates):
         state_sample[sample] = np.random.uniform(1,1)
 
     #annealing test
-    if ((update %15 == 0) and (update != 0)):
+    if ((update %2 == 0) and (update != 0)):
         epsilon_greedy=epsilon_greedy/2
         print("RESET epsilon ANNEALING")
         print(epsilon_greedy)
-
+    #if ((update %5 == 0) and (update != 0)):
+    #    alpha=alpha/2
+    #    print("RESET alpha ANNEALING")
+    #    print(alpha)
+    if ((update %1000 == 0) and (update != 0)):
+        alpha=alpha/2
+        print("RESET alpha ANNEALING")
+        print(alpha)
+    
     #    #print(epsilon_greedy)
     #    print(alpha)
     #print(state_sample)
     #update with step-size is already performed, just use new theta values
     #breakpoint()
     threshold=threshold/2.0
-    sum_reward = machine_learning_functions.update_theta_SGD_TD(threshold,nn_model,loss_fn, optimizer, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
+    [sum_reward, average_loss] = machine_learning_functions.update_theta_SGD_TD(threshold,nn_model,loss_fn, optimizer, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
     print("TOTAL REWARD")
     print(sum_reward)
+    print("ave loss")
+    print(average_loss)
     #breakpoint()
     #print(list(nn_model.parameters()))
     #print("**********************************************************************")
     #print("EPISODE FINISHED")
     #print("sum")
     #print(sum_reward)
+    episodic_loss[update]=average_loss
     episodic_reward[update]=sum_reward
-    #print("endSum")
-    #print(list(nn_model.parameters()))
-    #print(list(nn_model.parameters()))
-    #breakpoint()
 #%%
 episodic_reward=episodic_reward[0:update]
 plt.plot(episodic_reward)
@@ -693,9 +706,11 @@ variable_concs_begin = np.array(metabolites['Conc'].iloc[0:nvar].values, dtype=n
 activity_matrix = np.ones([v_log_counts.size, 10])
 
 total_reward=0
-reward_vec= np.zeros(attempts)
+reward_vec_1= np.zeros(attempts)
 
-  
+
+ds_total_1=0.0  
+ds_total_1_vec=[]
 v_log_counts = np.log(variable_concs_begin*Concentration2Count)
 while( (i < attempts) and (np.max(delta_S) > 0) ):
     
@@ -716,13 +731,16 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
     epr = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
     delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
     reward=0
+
     if (i > 0):
             
         reward = machine_learning_functions.reward_value(v_log_counts, \
                                                          v_log_counts_matrix1[:,i-1], KQ_f, KQ_r, E_regulation,\
                                                          delta_S,delta_S_previous)
-    reward_vec[i]=reward
-    total_reward+=reward 
+
+    total_reward+=reward
+            
+    reward_vec_1[i]=reward
     delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts);
     
     [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
@@ -752,7 +770,6 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
                            delta_S)
         
             
-    E_regulation[React_Choice] = newE
     print("rct_choice")
     print(React_Choice)
     print("newE")
@@ -765,6 +782,13 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
         
     #print ("sum_flux")
     #print(np.sum(rxn_flux))
+
+
+    E_regulation[React_Choice] = newE
+    ds = np.sum(delta_S[delta_S>0])
+    ds_total_1_vec.append(ds)
+        
+    ds_total_1 += ds
     print("entropy_production_rate")
     print(epr)
         
@@ -774,11 +798,11 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
     delta_S_previous = delta_S.copy()
         
         
-reward_vec=reward_vec
-v_log_counts_matrix1 = v_log_counts_matrix1[:,0:i]
-final_choices1=final_choices1[0:i]
-epr_vector_method_1=epr_vector_method_1[0:i]
-flux_vector_method_1=flux_vector_method_1[0:i]
+reward_vec_1=reward_vec_1[0:i+1]
+v_log_counts_matrix1 = v_log_counts_matrix1[:,0:i+1]
+final_choices1=final_choices1[0:i+1]
+epr_vector_method_1=epr_vector_method_1[0:i+1]
+flux_vector_method_1=flux_vector_method_1[0:i+1]
 opt_concs1 = v_log_counts
 E_reg1 = E_regulation
 rxn_flux_1 = rxn_flux
@@ -808,8 +832,11 @@ KQ_r_old=np.ones(Keq_constant.size)
 
 activity_matrix = np.ones([E_regulation.size, 20])
 
-
+ds_total_2=0.0
+ds_total_2_vec=[]
 total_reward=0
+
+reward_vec_2= np.zeros(attempts)
 for test in range(0,1):
     #theta_linear=np.random.uniform(0,1,theta_linear.size)
     i = 0
@@ -850,11 +877,11 @@ for test in range(0,1):
         
         #breakpoint()
         
-        x = torch.zeros(1, E_regulation.size)
-        y = torch.zeros(1, 1)
+        x = torch.zeros(1,1, E_regulation.size)
+        y = torch.zeros(1, 1,1)
     
         for j in range(0,E_regulation.size):
-            x[0][j] = E_regulation[j].copy()
+            x[0][0][j] = E_regulation[j].copy()
         
         [React_Choice, reward] = machine_learning_functions.policy_function(nn_model,E_regulation, theta_linear, v_log_counts)
         
@@ -881,9 +908,14 @@ for test in range(0,1):
         deltaS_value = delta_S[React_Choice]
         
         epr_vector_method_2[i]=epr
-            
+        
+        ds = np.sum(delta_S[delta_S>0])
+        ds_total_2 += ds
+        ds_total_2_vec.append(ds)
         if (np.max(delta_S) > 0):
             total_reward+=reward
+            
+            reward_vec_2[i]=reward
             E_regulation[React_Choice] = newE
         flux_vector_method_2[i]=np.sum(rxn_flux)
         v_log_counts_matrix2[:,i] = v_log_counts
@@ -891,8 +923,9 @@ for test in range(0,1):
         #print("v_log_counts")
         #print(v_log_counts)
         print(epr)
-        print(np.max(rxn_flux))
-        print(np.max(delta_S))
+        #print(np.max(rxn_flux))
+        print("ds>0")
+        print(np.sum(delta_S[delta_S>0]))
         #if (React_Choice==0):
         #print(delta_S_metab)
             
@@ -902,6 +935,8 @@ for test in range(0,1):
         i = i+1
     activity_matrix[:,test] = E_regulation
     
+
+reward_vec_2=reward_vec_2[0:i]
 v_log_counts_matrix2 = v_log_counts_matrix2[:,0:i]
 final_choices2=final_choices2[0:i]
 epr_vector_method_2=epr_vector_method_2[0:i]
