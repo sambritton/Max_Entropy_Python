@@ -29,17 +29,23 @@ gamma=[]
 num_rxns=[]
 num_samples=[]
 length_of_path=[]
+
+penalty_reward = -5.0
+
 #%% use functions 
 import max_entropy_functions
 import numpy as np
 import pandas as pd
 import random
+import time
 from scipy.optimize import least_squares
 from scipy.optimize import minimize
 import multiprocessing as mp
 from multiprocessing import Pool
+import torch
 
-Method = 'trf'
+Method = 'lm'
+
 
 def generate_states(num_states_generate, steps_between_states, seed_state, v_log_counts_static ):
     
@@ -145,6 +151,7 @@ def test_state_validity(state, v_log_counts_static):
         
         #make iniial change for beginning of path
         React_Choice=act
+
         initialE = state[act]
         newE = max_entropy_functions.calc_reg_E_step(state, React_Choice, nvar, 
                                v_log_counts, f_log_counts, desired_conc, S_mat, A, 
@@ -168,39 +175,90 @@ def test_state_validity(state, v_log_counts_static):
 #NOTE Sign Switched, so we maximize (-epr)
 
 #returns vector
+    
+def delta_delta_s_vec(delta_S, delta_S_metab, ccc, KQ, E_regulation, v_log_counts):
+    S_index, = np.where(delta_S > -np.inf) 
+    sm_idx, = np.where(delta_S_metab > 0.0) #reactions that have bad values 
+
+    S_index_neg, = np.where(delta_S < 0.0) 
+    sm_idx_neg, = np.where(delta_S_metab < 0.0) #reactions that have bad values 
+    
+    temp = ccc[np.ix_(sm_idx, S_index)]#np.ix_ does index outer product
+    temp_neg = ccc[np.ix_(sm_idx_neg, S_index_neg)]#np.ix_ does outer product
+                
+    temp2 = (temp > 0) #ccc>0 means derivative is positive (dlog(conc)/dlog(activity)>0) 
+    #this means regulation (decrease in activity) will result in decrease in conc
+            
+            
+    temp2_neg = (temp_neg > 0)
+            
+    #row represents rxn, col represents metabolite
+    temp_x = (temp * temp2)#Do not use matmul, use element wise mult.
+    temp_x_neg = (temp_neg * temp2_neg)
+            
+    dx = np.multiply(v_log_counts[sm_idx].T, temp_x.T)
+    dx_neg = np.multiply(v_log_counts[sm_idx_neg].T, temp_x_neg.T)
+
+    #dx_neg = v_counts[sm_idx_neg].T*temp_x_neg
+    
+    #Change in enzyme activity
+    
+    DeltaAlpha = 0.001; # must be small enough such that the arguement
+                                # of the log below is > 0
+    DeltaDeltaS = -np.log(1 - DeltaAlpha*np.divide(dx, v_log_counts[sm_idx]))
+            
+    alternate_vector = np.sum(DeltaDeltaS, axis=1) #sum along metabolites
+    
+    return alternate_vector       
+            
 def entropy_production_rate_vec(KQ_f, KQ_r, E_Regulation, *args):
+    
     
     varargin = args
     nargin = len(varargin)
-    method = 0
-    theta=[]
+
+    theta=np.ones(E_Regulation.size)
     if (nargin == 1):
-        method = 1
         theta=varargin[0].copy()
     if (nargin == len(E_Regulation)):
-        method = 1
         theta=varargin.copy()
+
     
-    #print(theta)
     KQ_f_reg = E_Regulation * KQ_f
     KQ_r_reg = E_Regulation * KQ_r
     sumOdds = np.sum(KQ_f_reg) + np.sum(KQ_r_reg)
+
+    kq_ge1_idx, = np.where(KQ_f >= 1)
+    kq_le1_idx, = np.where(KQ_f < 1)
+    kq_inv_ge1_idx, = np.where(KQ_r > 1)
+    kq_inv_le1_idx, = np.where(KQ_r <= 1)
+    #epr = +np.sum(KQ_f_reg * safe_ln(KQ_f_reg))/sumOdds + np.sum(KQ_r_reg * safe_ln(KQ_r_reg))/sumOdds
     
-    val = []
-    if (method == 0):
-        val = KQ_f_reg/sumOdds * np.log(KQ_f) + KQ_r_reg/sumOdds * np.log(KQ_r)
-    else:
-        val = theta * (KQ_f_reg/sumOdds * np.log(KQ_f) + KQ_r_reg/sumOdds * np.log(KQ_r))
+
+    val=np.zeros(E_Regulation.size)
+    if (kq_ge1_idx.size>0):
+        val[kq_ge1_idx] += theta[kq_ge1_idx] * (KQ_f_reg[kq_ge1_idx] * np.log(KQ_f[kq_ge1_idx]))/sumOdds
+        
+    if (kq_le1_idx.size>0):
+        val[kq_le1_idx] -= theta[kq_le1_idx] * (KQ_f_reg[kq_le1_idx] * np.log(KQ_f[kq_le1_idx]))/sumOdds
+        
+    if (kq_ge1_idx.size>0):
+        val[kq_inv_le1_idx] -= theta[kq_inv_le1_idx] * (KQ_r_reg[kq_inv_le1_idx] * np.log(KQ_r[kq_inv_le1_idx]))/sumOdds
+        
+    if (kq_le1_idx.size>0):
+        val[kq_inv_ge1_idx] += theta[kq_inv_ge1_idx] * (KQ_r_reg[kq_inv_ge1_idx] * np.log(KQ_r[kq_inv_ge1_idx]))/sumOdds
+        
     
-    #WHY NO MINUS?
-    EPR_matlab = +np.sum(KQ_f_reg*np.log(KQ_f))/sumOdds + np.sum(KQ_r_reg*np.log(KQ_r))/sumOdds
-    
-    #print('val')
-    #print(np.sum(val))
-    #print("m")
-    #print(entropy_production_rate)
-    if ((np.abs(EPR_matlab-np.sum(val) > 1e-5)) and (nargin==0) ):
-        breakpoint()
+    val_temp = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_Regulation)
+    if ((theta==1).all()):
+        if (val_temp - np.sum(val)>0.1):
+            breakpoint()
+    #val = +theta * (KQ_f_reg[kq_ge1_idx] * np.log(KQ_f[kq_ge1_idx]))/sumOdds \
+    #      -theta * (KQ_f_reg[kq_le1_idx] * np.log(KQ_f[kq_le1_idx]))/sumOdds \
+    #      -theta * (KQ_r_reg[kq_inv_le1_idx] * np.log(KQ_r[kq_inv_le1_idx]))/sumOdds \
+    #      +theta * (KQ_r_reg[kq_inv_ge1_idx] * np.log(KQ_r[kq_inv_ge1_idx]))/sumOdds
+          
+
     return val
 
 def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
@@ -228,7 +286,7 @@ def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
 
 #Physically this is trying to minimizing the free energy change in each reaction. 
 #we use the negative since maximizing (-f(x)) is the same as minimizing (f(x))
-def state_value(theta_linear, delta_s, KQ_f, KQ_r, E_Regulation):
+def state_value(nn_model, theta_linear, delta_s, delta_s_metab, KQ_f, KQ_r, E_Regulation, v_log_counts):
     
     
     #Problem::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
@@ -238,32 +296,120 @@ def state_value(theta_linear, delta_s, KQ_f, KQ_r, E_Regulation):
     
     #As is, theta chooses lowest overall flux between forward and backward
     
-    KQ_f_reg = E_Regulation * KQ_f
-    KQ_r_reg = E_Regulation * KQ_r
+    #KQ_f_reg = E_Regulation * KQ_f
+    #KQ_r_reg = E_Regulation * KQ_r
     
     
-    sumOdds = np.sum(KQ_f_reg) + np.sum(KQ_r_reg)
-    norm_LR = np.sum(theta_linear * KQ_f_reg/sumOdds * np.log(KQ_f))
-    norm_RL = np.sum(theta_linear * KQ_r_reg/sumOdds * np.log(KQ_r))
+    #sumOdds = np.sum(KQ_f_reg) + np.sum(KQ_r_reg)
+    #norm_LR = np.sum(theta_linear * KQ_f_reg/sumOdds * np.log(KQ_f))
+    #norm_RL = np.sum(theta_linear * KQ_r_reg/sumOdds * np.log(KQ_r))
    
     #print("norm_LR")
     #print(norm_LR)
     #print("norm_RL")
     #print(norm_RL)
-    vec = entropy_production_rate_vec(KQ_f, KQ_r, E_Regulation, theta_linear)
     
-    val = -np.sum(vec)
-    val_prev = -(norm_LR + norm_RL)
-    if (np.abs(val - val_prev)>1e-5):
-        breakpoint()
+    #vec = entropy_production_rate_vec(KQ_f, KQ_r, E_Regulation, theta_linear)
+    #val = np.sum(vec)
+    
+    #ALT
+    #temp_vec = delta_s.copy()
+    #temp_vec[temp_vec<0]=0
+    #vec = theta_linear * temp_vec
+    #val = np.sum(vec)
+    
+    #NN
+# =============================================================================
+#     x = torch.zeros(1,1, E_Regulation.size)
+#     for i in range(0,E_Regulation.size):
+#         x[0][0][i] = E_Regulation[i].copy()
+#     y_pred = nn_model(x)
+#     val=y_pred
+# =============================================================================
+    
+    x = torch.zeros(1,1, E_Regulation.size)
+    count=0
 
+    for i in range(0,E_Regulation.size):
+        val = E_Regulation[i].copy()
+        val = val**(0.5)
+        x[0][0][i] = np.log(1.0 + np.exp(20.0)*val)
+        count+=1
+    y_pred = nn_model(x)
+    val=y_pred
+    
+    #print(val)
+    
+    #breakpoint()
+    #print(list(nn_model.parameters()))
+    #val = np.sum(theta_linear * alternate_value_vector)
+    
+    #state_value_vec = delta_s[delta_s>0]
+    
+    #val = np.sum(theta_linear * state_value_vec)
+    #vec = np.append(delta_s, delta_s_metab).copy()
+    
+    
+    #vec = delta_s_metab.copy()
+    
+    #vec[vec<0]=0
+    #val = np.sum(theta_linear * vec)
     return val
 
 #define reward as entropy production rate
     #usually positive, so 
-def reward_value(KQ_f, KQ_r, E_Regulation):
-    val = -entropy_production_rate(KQ_f, KQ_r, E_Regulation)
-    return val
+def reward_value(v_log_counts_future, v_log_counts_old, KQ_f, KQ_r, E_Regulation,\
+                 delta_s_next,delta_s_previous):
+    
+    #val_old = max_entropy_functions.calc_deltaS_metab(v_log_counts_old)
+    #val_future = max_entropy_functions.calc_deltaS_metab(v_log_counts_future)
+    
+    #want to maximize the change in loss function for positive values. 
+    
+    
+    val_future=delta_s_next.copy()
+    val_future[val_future<0.0]=0
+        
+    val_old=delta_s_previous.copy()
+    val_old[val_old<0.0]=0
+    
+    #reward = np.sum((val_old) - (val_new))
+    
+    val_old[val_old<0.0] = 0
+    val_future[val_future<0] = 0
+    
+    final_reward=0.0
+    reward_s = np.sum(val_old - val_future) #this is positive if val_future is less, so we need
+    
+    
+    if ((reward_s <= 0.0)):
+        final_reward = penalty_reward
+        
+    if (reward_s > 0.0):
+        final_reward = -0.01
+        #if negative -> take fastest path
+        #if positive -> take slowest path
+        
+    if ((delta_s_next<=0.0).all()):
+        epr = entropy_production_rate(KQ_f, KQ_r, E_Regulation)
+        final_reward = 1.0 * epr
+        #breakpoint()
+       
+    #to maximize it. This will make the 
+    
+    #val_new=delta_s_next.copy()
+    #val_new[val_new<0]=0
+        
+    #val_old=delta_s_previous.copy()
+    #val_old[val_old<0]=0
+    
+    #reward = np.sum((val_old) - (val_new))
+    #Reward = How much did delta_S decrease
+    
+    #reward = np.sum(val_old) - np.sum(val_new)
+
+    
+    return final_reward
 
      
 def fun_opt_theta(theta_linear,state_delta_s_matrix, target_value_vec, KQ_f_matrix, KQ_r_matrix, state_sample_matrix):
@@ -348,7 +494,7 @@ def update_theta( theta_linear, v_log_counts_static, *args):
         
         delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
         state_delta_s_matrix[:,i] = delta_S
-        #delta_S_metab = calc_delaS_metab(v_log_counts);
+        #delta_S_metab = calc_deltaS_metab(v_log_counts);
         [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, state_sample)
         A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, state_sample )
         
@@ -709,14 +855,22 @@ def update_theta_SGD( step_size, theta_linear, v_log_counts_static, *args):
     return new_theta
 
 
-def update_theta_SGD_TD( step_size, n_back_step, theta_linear, v_log_counts_static, state_sample, epsilon_greedy):
+def update_theta_SGD_TD( threshold,nn_model,loss_fn, optimizer, step_size, n_back_step, theta_linear, v_log_counts_static, state_sample, epsilon_greedy):
     #First we sample m states from E
     #First args input is epsilon
     #Second args input is a matrix of states to fit to.
-    KQ_f_matrix= np.zeros(shape=(num_rxns, length_of_path+1))
-    KQ_r_matrix= np.zeros(shape=(num_rxns, length_of_path+1))
-    states_matrix= np.zeros(shape=(num_rxns, length_of_path+1))
-    delta_S_matrix = np.zeros(shape=(num_rxns, length_of_path+1))
+    
+    sum_reward_episode=0
+    end_of_path = 1000 #this is the maximum length a path can take
+    KQ_f_matrix= np.zeros(shape=(num_rxns, end_of_path+1))
+    KQ_r_matrix= np.zeros(shape=(num_rxns, end_of_path+1))
+    states_matrix= np.zeros(shape=(num_rxns, end_of_path+1))
+    delta_S_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
+    
+    delta_S_metab_matrix = np.zeros(shape=(nvar, end_of_path+1))
+    v_log_counts_matrix = np.zeros(shape=(nvar, end_of_path+1))
+    
+    alt_value_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
 
     has_been_up_regulated = 10*np.ones(num_rxns)
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state_sample))
@@ -734,19 +888,30 @@ def update_theta_SGD_TD( step_size, n_back_step, theta_linear, v_log_counts_stat
     
     [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f_init, KQ_r_init, state_sample)
     A_init = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, state_sample )
+            
     
-    
-    initial_reward = reward_value(KQ_f_init, KQ_r_init, state_sample)
-    
-    
-    states_matrix[:,0] = state_sample
-    delta_S_matrix[:,0] = delta_S_init
-    KQ_f_matrix[:,0] = KQ_f_init
-    KQ_r_matrix[:,0] = KQ_r_init
+    delta_S_metab_init = max_entropy_functions.calc_deltaS_metab(v_log_counts);
         
-    initial_reward_reset = initial_reward.copy
+    [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A_init, S_mat, rxn_flux_init, RR)
+        
+    
+    alt_value_vec = delta_delta_s_vec(delta_S_init, delta_S_metab_init, ccc, KQ_f_init, state_sample, v_log_counts)
+    
+    initial_reward = np.sum(delta_S_init[delta_S_init>0])
+    #reward_value(v_log_counts,v_log_counts, KQ_f_init, KQ_r_init, state_sample,\
+    #                              delta_S_init,delta_S_init)
+    
+    v_log_counts_matrix[:,0] = v_log_counts.copy()
+    states_matrix[:,0] = state_sample.copy()
+    delta_S_matrix[:,0] = delta_S_init.copy()
+    delta_S_metab_matrix[:,0] = delta_S_metab_init.copy()
+    KQ_f_matrix[:,0] = KQ_f_init.copy()
+    KQ_r_matrix[:,0] = KQ_r_init.copy()
+    alt_value_matrix[:,0] = alt_value_vec.copy()
+    initial_reward_reset = initial_reward
     
     v_log_counts_path = v_log_counts.copy()
+    v_log_counts_path_previous = v_log_counts.copy()
     path_state_sample = state_sample.copy() #this is modified
     A_path = A_init.copy()  
     rxn_flux_path = rxn_flux_init.copy()
@@ -755,24 +920,34 @@ def update_theta_SGD_TD( step_size, n_back_step, theta_linear, v_log_counts_stat
     
     KQ_r_path = KQ_r_init.copy()
                 
-    value_path = np.zeros(length_of_path+1)   
-    act_path = np.zeros(length_of_path+1) 
+    value_path = np.zeros(end_of_path+1)   
+    act_path = np.zeros(end_of_path+1) 
+    
     value_path[0] = initial_reward
     state_tau=[]
     KQ_f_tau=[]
     KQ_r_tau=[]
     delta_S_tau=[]
-    
+    path_delta_S_previous = delta_S_init.copy()
+    path_delta_S = delta_S_init.copy()
+    #breakpoint()
     t = 0
-    tau = 0
-    while tau < (length_of_path - 1):
-        if (t < length_of_path):
+    tau_true = 0
+    while tau_true < (end_of_path - 1):
+        
+        if (t < end_of_path):
 
-            React_Choice = policy_function(path_state_sample, theta_linear, v_log_counts_path, epsilon_greedy)#regulate each reaction.
+            [React_Choice, policy_reward] = policy_function(nn_model, path_state_sample, theta_linear, v_log_counts_path, epsilon_greedy)#regulate each reaction.
+            if (React_Choice == -1):
+                end_of_path=t
+                break
+                #breakpoint()
+                
             
             newE_path = max_entropy_functions.calc_reg_E_step(path_state_sample, React_Choice, nvar, 
                                v_log_counts_path, f_log_counts, desired_conc, S_mat, A_path,
-                               rxn_flux_path, KQ_f_path, False, has_been_up_regulated)
+                               rxn_flux_path, KQ_f_path, False, has_been_up_regulated,\
+                               path_delta_S)
                 
             #now generate the next step based on newE
                 
@@ -791,60 +966,248 @@ def update_theta_SGD_TD( step_size, n_back_step, theta_linear, v_log_counts_stat
             [RR_path, Jac_path] = max_entropy_functions.calc_Jac2(v_log_counts_path, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f_path, KQ_r_path, path_state_sample)
             A_path = max_entropy_functions.calc_A(v_log_counts_path, f_log_counts, S_mat, Jac_path, path_state_sample )
         
+            epr_path = max_entropy_functions.entropy_production_rate(KQ_f_path, KQ_r_path, path_state_sample)
             
             path_delta_S = max_entropy_functions.calc_deltaS(v_log_counts_path, f_log_counts, S_mat, KQ_f_path)
             
-            action_value = reward_value(KQ_f_path, KQ_r_path, path_state_sample)
+            delta_S_metab_path = max_entropy_functions.calc_deltaS_metab(v_log_counts_path)
             
-            #if (path == (length_of_path-1)):
-                #action_value = state_value(theta_linear, path_delta_S, KQ_f_path, KQ_r_path, path_state_sample)
+            [ccc_path, fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A_path, S_mat, rxn_flux_path, RR_path)
             
+            alt_value_path_vec = delta_delta_s_vec(path_delta_S, delta_S_metab_path, ccc_path, KQ_f_path, path_state_sample, v_log_counts_path)
+    
+            action_value = reward_value(v_log_counts_path, v_log_counts_path_previous, KQ_f_path, KQ_r_path, path_state_sample,\
+                                        path_delta_S,path_delta_S_previous)
+            
+            sum_reward_episode+=action_value
+            #print("REWARD")
+            #print(action_value)
+            
+            if (np.abs(policy_reward-action_value) >0.01):
+                breakpoint()
+            path_delta_S_previous = path_delta_S.copy()#set after calculation
+            v_log_counts_path_previous = v_log_counts_path.copy()
+
             act_path[t+1] = React_Choice
+            #print("setting  ")
+            #print(t+1)
             value_path[t+1] = action_value
             states_matrix[:,t+1] = path_state_sample.copy()
             KQ_f_matrix[:,t+1] = KQ_f_path.copy()
             KQ_r_matrix[:,t+1] = KQ_r_path.copy()
             delta_S_matrix[:,t+1] = path_delta_S.copy()
+            delta_S_metab_matrix[:,t+1] = delta_S_metab_path.copy()
+            v_log_counts_matrix[:,t+1] = v_log_counts_path.copy()
+            alt_value_matrix[:,t+1] = alt_value_path_vec.copy()
             
+            #last_state = states_matrix[:,t]
+            current_state = states_matrix[:,t+1]
+            
+            
+
+            #We stop the path if we have no more positive loss function values, or if we revisit a state. 
+            if ((path_delta_S<=0.0).all()):
+                end_of_path=t+1
+                
+                print("**************************************Path Length ds<0******************************************")
+                print(end_of_path)
+                print("Final STATE")
+                print(path_state_sample)
+                print(rxn_flux_path)
+                print(epr_path)
+                
+
+            for state in range(0,t+1):
+                last_state = states_matrix[:,state]
+                if ((current_state==last_state).all()):
+                    end_of_path=t+1
+                    
+                    print("**************************************Path Length******************************************")
+                    print(end_of_path)
+                    print("Final STATE")
+                    print(path_state_sample)
+                    print(rxn_flux_path)
+                    print(epr_path)
+
+        
+        #tau = t - n_back_step + 1
+        #instead of estimating state tau = t-n+1
+        #collect estimation for all states from 0 to t.
+        #using temp_t taking values from [0,t]. This will take an estimate for all the 
+        #states that we have visiting in the current path. We'll use a random selection of them to train on. 
+        
+        #idea: Faster to select states, then generate estimate values after selection. 
+        
+        #number of samples to use cannot exceed the number of states visited so far: (t-n_back_step+1)
+        
+        #batch_size = min(2*n_back_step, t - n_back_step + 1)
+        
+
+        ##BEGIN OLD METHOD
+        tau_true = t - n_back_step + 1
         tau = t - n_back_step + 1
-            
+                
         if (tau >=0):
+            #breakpoint()
             estimate_value = 0
+# =============================================================================
+#                     
+#             x = torch.zeros(1, 1, Keq_constant.size)
+#             y = torch.zeros(1, 1, 1)
+#             
+# =============================================================================
+            
+            x = torch.zeros(1, 1, Keq_constant.size)
+            y = torch.zeros(1, 1, 1)
             
             #sum must go from i = tau+1 until the value min( tau+n, LOP)
             #We therefore need to increment the range values by one. 
-            for i in range(tau + 1, min(tau + n_back_step+1, length_of_path+1)):    
+            for i in range(tau + 1, min(tau + n_back_step, end_of_path)+1):    
                 estimate_value += (gamma**(i-tau-1)) * value_path[i] 
-                
-            if ((tau + n_back_step) < length_of_path):
+                #print("estimate")
+                #print(estimate_value)
+            if ((tau + n_back_step) < end_of_path):
                 state_tau_n = states_matrix[:, tau + n_back_step].copy()
                 KQ_f_tau_n = KQ_f_matrix[:, tau + n_back_step].copy()
                 KQ_r_tau_n = KQ_r_matrix[:, tau + n_back_step].copy()
                 delta_S_tau_n = delta_S_matrix[:, tau + n_back_step].copy()
-                value_tau_n = state_value(theta_linear, delta_S_tau_n, KQ_f_tau_n, KQ_r_tau_n, state_tau_n)
-        
-                estimate_value += (gamma**(n_back_step)) + value_tau_n
-                
-                #breakpoint()
-                
-            #now calcuale new weights with estimate value
+                    
+                v_log_counts_tau_n = v_log_counts_matrix[:, tau + n_back_step].copy()
+                alt_value_tau_n = alt_value_matrix[:, tau + n_back_step].copy()
+                delta_S_metab_tau_n = delta_S_metab_matrix[:, tau + n_back_step].copy()
+                value_tau_n = state_value(nn_model,theta_linear, delta_S_tau_n, delta_S_metab_tau_n, KQ_f_tau_n, KQ_r_tau_n, state_tau_n, v_log_counts_tau_n)
+                        
+                estimate_value += (gamma**(n_back_step)) * value_tau_n
+                    #print("estimate_tau")
+                    #print(estimate_value)
+                    
+# =============================================================================
+#             state_tau = states_matrix[:, tau].copy()
+#             for rxn in range (0,state_tau.size):
+#                 x[0,0,rxn] = state_tau[rxn].copy()
+#                 
+# =============================================================================
+            
+            #v_log_counts_tau = v_log_counts_matrix[:, tau].copy()
+            
             state_tau = states_matrix[:, tau].copy()
-            KQ_f_tau = KQ_f_matrix[:, tau].copy()
-            KQ_r_tau = KQ_r_matrix[:, tau].copy()
-            previous_value = state_value(theta_linear, delta_S_tau, KQ_f_tau, KQ_r_tau, state_tau)
-    
-            vec = entropy_production_rate_vec(KQ_f_tau, KQ_r_tau, state_tau)
-            x_t = -(vec) #this is -EPR before summing it. 
+            
 
-            #new_theta = theta_linear + step_value * (x_t)
-            theta_linear = SGD_UPDATE(theta_linear, step_size, estimate_value, previous_value, x_t)        
+            for i in range(0,state_tau.size):
+                val = state_tau[i].copy()
+                val = val**(0.5)
+                x[0][0][i] = np.log(1.0 + np.exp(20.0)*val)
+                
+# =============================================================================
+#             for met in range (0,v_log_counts_tau.size):
+#                 x[0,0,met] = v_log_counts_tau[met].copy()
+#                 
+# =============================================================================
+            y[0][0][0] = estimate_value
+                
+            y_pred = nn_model(x)
+                            
+            loss = loss_fn(y_pred, y)
+            print(loss.item())
+            nn_model.zero_grad()
+            loss.backward(retain_graph=True)
+                #print("difference, target -> pred")
+                #print(y)
+                #print(y_pred)
+                #breakpoint()
+        
             
-            
-        #after complete loop is done, increment t.
-        t+=1
-            
+            optimizer.step()
+            optimizer.zero_grad()
+        
+        ##END OLD METHOD
+        
+        
+        ##NEW BATCH METHOD
+        ##NEW BATCH METHOD
+        ##NEW BATCH METHOD
+# =============================================================================
+# 
+#         tau_true = t-n_back_step+1
+#         loss_max = np.inf
+#         
+#         while (loss_max > threshold):
+#             no_update=True
+#             #train on all current data points. 
+#             old_loss=0.0
+#             current_loss=0.0
+#             print("training")
+#             print(t)
+#             min_val=0 #standard method uses min_t. 
+#             for test_t in range(min_val,t+1):
+#                 
+#                 tau = t - n_back_step + 1
+#                 
+#                 if (tau >=0):
+#                     no_update=False
+#                     #breakpoint()
+#                     estimate_value = 0
+#                     
+#                     x = torch.zeros(1, 1, Keq_constant.size)
+#                     y = torch.zeros(1, 1, 1)
+#                     #sum must go from i = tau+1 until the value min( tau+n, LOP)
+#                     #We therefore need to increment the range values by one. 
+#                     for i in range(tau + 1, min(tau + n_back_step, end_of_path)+1):    
+#                         estimate_value += (gamma**(i-tau-1)) * value_path[i] 
+#                         #print("estimate")
+#                         #print(estimate_value)
+#                     if ((tau + n_back_step) < end_of_path):
+#                         state_tau_n = states_matrix[:, tau + n_back_step].copy()
+#                         KQ_f_tau_n = KQ_f_matrix[:, tau + n_back_step].copy()
+#                         KQ_r_tau_n = KQ_r_matrix[:, tau + n_back_step].copy()
+#                         delta_S_tau_n = delta_S_matrix[:, tau + n_back_step].copy()
+#                         
+#                         alt_value_tau_n = alt_value_matrix[:, tau + n_back_step].copy()
+#                         delta_S_metab_tau_n = delta_S_metab_matrix[:, tau + n_back_step].copy()
+#                         value_tau_n = state_value(nn_model,theta_linear, delta_S_tau_n, delta_S_metab_tau_n, KQ_f_tau_n, KQ_r_tau_n, state_tau_n, alt_value_tau_n)
+#                         
+#                         estimate_value += (gamma**(n_back_step)) * value_tau_n
+#                         #print("estimate_tau")
+#                         #print(estimate_value)
+#                     state_tau = states_matrix[:, tau].copy()
+#                     for rxn in range (0,Keq_constant.size):
+#                         x[0,0,rxn] = state_tau[rxn].copy()
+#                     y[0][0][0] = estimate_value
+#                 
+#                     y_pred = nn_model(x)
+#                             
+#                     loss = loss_fn(y_pred, y)
+#                     print(loss.item())
+#                     nn_model.zero_grad()
+#                     loss.backward(retain_graph=True)
+#                     #print("difference, target -> pred")
+#                     #print(y)
+#                     #print(y_pred)
+#                     #breakpoint()
+#         
+#             
+#                     optimizer.step()
+#                     optimizer.zero_grad()
+#                     
+#                     current_loss = loss.item()
+#                     if (current_loss>old_loss):
+#                         loss_max = current_loss
+#                         old_loss = current_loss
+#             
+#             #print("max loss")
+#             #print(loss_max)
+#             #breakpoint()
+#             if (no_update==True):
+#                 loss_max=-np.inf
+# =============================================================================
     
-    return theta_linear
+        ##NEW BATCH METhOD
+        ##NEW BATCH METhOD
+        ##NEW BATCH METhOD
+
+        t+=1
+    
+    return sum_reward_episode
 
 def SGD_UPDATE(theta_linear, step_size, estimate_value, previous_value, x_t):
 
@@ -855,12 +1218,12 @@ def SGD_UPDATE(theta_linear, step_size, estimate_value, previous_value, x_t):
 
     new_theta = theta_linear + step_value * (x_t)
     
-    new_theta[new_theta<0] = 0
+    #new_theta[new_theta<0] = 0
     return new_theta
 #%%
 #input state, return action
     
-def policy_function(state, theta_linear, v_log_counts_path, *args ):
+def policy_function(nn_model,state, theta_linear, v_log_counts_path, *args ):
     #last input argument should be epsilon for use when using greedy-epsilon algorithm. 
     
     varargin = args
@@ -873,8 +1236,11 @@ def policy_function(state, theta_linear, v_log_counts_path, *args ):
     #MAYBE REMOVE
     has_been_up_regulated = 10*np.ones(num_rxns)
     
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
-    v_log_counts = res_lsq.x
+    #res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
+    
+    #if (res_lsq.optimality > 0.00001):
+    #    breakpoint()
+    v_log_counts = v_log_counts_path.copy()#res_lsq.x
     log_metabolites = np.append(v_log_counts, f_log_counts)
         
     rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state)
@@ -885,18 +1251,30 @@ def policy_function(state, theta_linear, v_log_counts_path, *args ):
     [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, state)
     A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, state )
     
+    delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
+    
+    delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts);
+        
+    [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
+        
+    alt_value_vec = delta_delta_s_vec(delta_S, delta_S_metab, ccc, KQ_f, state, v_log_counts)
+    
+    
+    
     reaction_size_to_regulate = num_rxns
     init_action_val = -np.inf
     action_choice=1
     #breakpoint()
     
-    initial_reward = reward_value(KQ_f, KQ_r, state)
+    #initial_reward = reward_value(v_log_counts,v_log_counts, KQ_f, KQ_r, state)
         
     action_value_vec = np.zeros(reaction_size_to_regulate)
     state_value_vec = np.zeros(reaction_size_to_regulate)
     E_test_vec = np.zeros(reaction_size_to_regulate)
     old_E_test_vec = np.zeros(reaction_size_to_regulate)
     current_reward_vec = np.zeros(reaction_size_to_regulate)
+    #print("BEGIN ACTIONS")
+    
     for act in range(0,reaction_size_to_regulate):
         #print("in policy_function action loop")
         #print("v_log_counts")
@@ -907,7 +1285,8 @@ def policy_function(state, theta_linear, v_log_counts_path, *args ):
         
         old_E = state[act]
         newE = max_entropy_functions.calc_reg_E_step(state, React_Choice, nvar, v_log_counts, f_log_counts,
-                               desired_conc, S_mat, A, rxn_flux, KQ_f, False, has_been_up_regulated)
+                               desired_conc, S_mat, A, rxn_flux, KQ_f, False, has_been_up_regulated,\
+                               delta_S)
         
         
         #if (( newE <1 ) and (newE > 0) and (newE != oldE)):
@@ -922,16 +1301,36 @@ def policy_function(state, theta_linear, v_log_counts_path, *args ):
         new_v_log_counts = new_res_lsq.x
         #breakpoint()
         new_log_metabolites = np.append(new_v_log_counts, f_log_counts)
-        
+        rxn_flux_new = max_entropy_functions.oddsDiff(new_v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample)
+    
         KQ_f_new = max_entropy_functions.odds(new_log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);    
         Keq_inverse = np.power(Keq_constant,-1)
         KQ_r_new = max_entropy_functions.odds(new_log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
 
-        new_delta_S = max_entropy_functions.calc_deltaS(new_v_log_counts,f_log_counts, S_mat, KQ_f_new)
-    
-        value_current_state = state_value(theta_linear, new_delta_S, KQ_f_new, KQ_r_new, trial_state_sample)
         
-        current_reward = reward_value(KQ_f_new, KQ_r_new, trial_state_sample)
+        delta_S_new = max_entropy_functions.calc_deltaS(new_v_log_counts,f_log_counts, S_mat, KQ_f_new)
+    
+        delta_S_metab_new = max_entropy_functions.calc_deltaS_metab(new_v_log_counts);
+        
+        [RR_new,Jac_new] = max_entropy_functions.calc_Jac2(new_v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f_new, KQ_r_new, trial_state_sample)
+    
+        A_new = max_entropy_functions.calc_A(new_v_log_counts, f_log_counts, S_mat, Jac_new, trial_state_sample )
+    
+
+        [ccc_new,fcc_new] = max_entropy_functions.conc_flux_control_coeff(nvar, A_new, S_mat, rxn_flux_new, RR_new)
+        
+        alt_value_vec_new = delta_delta_s_vec(delta_S_new, delta_S_metab_new, ccc_new, KQ_f_new, trial_state_sample, new_v_log_counts)
+    
+        #if (act == 13):
+        #    breakpoint()
+    
+
+        value_current_state = state_value(nn_model, theta_linear, delta_S_new, delta_S_metab_new, KQ_f_new, KQ_r_new, trial_state_sample, new_v_log_counts)
+        #breakpoint()
+        #print("value_current_state")
+        #print(value_current_state)
+        current_reward = reward_value(new_v_log_counts, v_log_counts, KQ_f_new, KQ_r_new, trial_state_sample,\
+                                      delta_S_new, delta_S)
 
         #best action is defined by the current chosen state and value 
         #should it be the next state value after?
@@ -956,32 +1355,64 @@ def policy_function(state, theta_linear, v_log_counts_path, *args ):
         if (action_value > init_action_val):
             init_action_val = action_value
             action_choice = act
-                
-    #print("min->max order of best actions")
-    #print(np.argsort(action_value_vec))
-    #print("action_value_vec")
-    #print(action_value_vec)
-    #print(action_value_vec[action_choice])
-    #print("state_value_vec")
-    #print(state_value_vec)
-    #print("E_test_vec")
-    #print(E_test_vec)
-    #print("oldE_test_vec")
-    #print(old_E_test_vec)
-    #print("current_reward_vec")
-    #print(current_reward_vec)
-    rxn_choices.remove(action_choice)
-    random_choice = random.choice(rxn_choices)
+            #print("actoin_value")
+            #print(action_value)
+        
+        if (current_reward == penalty_reward):
+            rxn_choices.remove(act)
+            #breakpoint()
+    
+    
+    #randomly choose one of the top choices if there is a tie. 
+    action_choice = np.random.choice(np.flatnonzero(action_value_vec == action_value_vec.max()))
+    
+    #action_value_vec
+# =============================================================================
+#     print("min->max order of best actions")
+#     print(np.argsort(action_value_vec))
+#     print("action_value_vec")
+#     print(action_value_vec)
+#     print(action_value_vec[action_choice])
+#     print(current_reward_vec[action_choice])
+#     if (current_reward_vec[action_choice]<-1):
+#         breakpoint()
+# 
+# 
+# 
+#     print("oldE_test_vec")
+#     print(old_E_test_vec)
+#     print("current_reward_vec")
+#     print(current_reward_vec)
+#     
+#     print("state_value_vec")
+#     print(state_value_vec)
+#     print("E_test_vec")
+#     
+#     print(E_test_vec)
+# =============================================================================
+    #breakpoint()
+    #breakpoint()
+    #rxn_choices.remove(action_choice)
     #breakpoint()
     unif_rand = np.random.uniform(0,1)
     if (unif_rand < epsilon_greedy):
-        print("****************************************************************")
-        print("****************************************************************")
+        if (len(rxn_choices)>1):
+            rxn_choices.remove(action_choice)
         print("USING EPSILON GREEDY")
-        print(action_choice)
+        print(action_choice)       
+        random_choice = random.choice(rxn_choices)
+        action_choice = random_choice
+
         print("replaced by")
         print(random_choice)
         
-        action_choice = random_choice
+    #if ((current_reward_vec<0).all()):
+    #    print("STOP SIMULAITON, no more rewards")
+    #    #breakpoint()
+    #    action_choice=-1
+    if ([action_choice] == 20):
+        breakpoint()
     
-    return action_choice
+        
+    
+    return [action_choice,current_reward_vec[action_choice]]

@@ -459,7 +459,7 @@ newE = max_entropy_functions.calc_reg_E_step(E_regulation,React_Choice, nvar, re
 delta_S = max_entropy_functions.calc_deltaS(res_lsq1.x, f_log_counts, S_mat, KQ_f)
 
 target_log_concs = np.ones(nvar) * 13.308368285158080
-delta_S_metab = max_entropy_functions.calc_delaS_metab(res_lsq1.x);
+delta_S_metab = max_entropy_functions.calc_deltaS_metab(res_lsq1.x);
 
 ipolicy = 4 #use ipolicy=1 or 4
 reaction_choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ_f, E_regulation,
@@ -477,10 +477,13 @@ theta_linear = np.array([ 0.65071853,  0.39740525,  2.07639527,  0.39709477,  0.
         0.17654277])
 
 #%%
-gamma = 0.75
-num_samples = 1 #number of state samples theta_linear attempts to fit to in a single iteration
-length_of_path = 10 #length of path after 1 forced step
-epsilon_greedy = 0.5
+ 
+import machine_learning_functions
+
+gamma = 0.8
+num_samples = 10 #number of state samples theta_linear attempts to fit to in a single iteration
+length_of_path = 5 #length of path after 1 forced step
+epsilon_greedy = 0.00
 
 #set variables in ML program
 machine_learning_functions.Keq_constant = Keq_constant
@@ -499,25 +502,104 @@ machine_learning_functions.num_rxns = Keq_constant.size
 machine_learning_functions.num_samples = num_samples
 machine_learning_functions.length_of_path = length_of_path
 
-#%%
-theta_linear = np.zeros(Keq_constant.size)
+    
 
-updates = 2500 #attempted iterations to update theta_linear
+#%%
+import torch
+N, D_in, H, D_out = 1, Keq_constant.size, Keq_constant.size, 1
+
+# Create random Tensors to hold inputs and outputs
+x_in = torch.zeros(N, D_in)
+y_in = torch.zeros(N, D_out)
+
+# Create random Tensors to hold inputs and outputs
+x = torch.randn(1,1, D_in)
+y = torch.randn(1,1, D_out)
+
+# =============================================================================
+# nn_model = torch.nn.Sequential(
+#         torch.nn.Linear(D_in, H),
+#                 
+#         torch.nn.ReLU(),
+#         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=2, padding=0),
+#         torch.nn.ReLU(),
+#         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=1, padding=0),
+#         torch.nn.ReLU(),
+#         torch.nn.MaxPool1d(2),
+#         
+#         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=2, padding=0),
+#         torch.nn.ReLU(),
+#         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=1, padding=0),
+#         torch.nn.ReLU(),
+#         torch.nn.MaxPool1d(2),
+#         torch.nn.ReLU(),
+#         
+#         torch.nn.Linear(60, D_out)
+#         )
+# =============================================================================
+nn_model = torch.nn.Sequential(
+        torch.nn.Linear(D_in, H),
+        torch.nn.ReLU(),
+        torch.nn.Linear(H, D_out))
+
+loss_fn = torch.nn.MSELoss(reduction='sum')
+alpha = 0.001
+print(list(nn_model.parameters()))           
+optimizer = torch.optim.Adam(nn_model.parameters(), lr=alpha)
+#%% SGD UPDATE TEST
+theta_linear=[]
+updates = 25000 #attempted iterations to update theta_linear
 v_log_counts = v_log_counts_stationary.copy()
+episodic_reward = np.zeros(updates)
+epsilon_greedy = 0.05
+
+n_back_step = 1 #these steps use rewards. Total steps before n use state values
+threshold=500
 for update in range(0,updates):
     
-    #annealing test
-    if ((update %50 == 0) and (update != 0)):
-        epsilon_greedy = epsilon_greedy/2.0
-        print("RESET EPSILON ANNEALING")
-        print(epsilon_greedy)
-    new_theta = machine_learning_functions.update_theta(theta_linear,v_log_counts, epsilon_greedy)
-    diff = theta_linear-new_theta
-    theta_linear = new_theta
-    print(np.sum(diff))
-    
-#%%
+    #generate state to use
+    state_is_valid = False
+    state_sample = np.zeros(Keq_constant.size)
+    for sample in range(0,len(state_sample)):
+        state_sample[sample] = np.random.uniform(1,1)
 
+    #annealing test
+    if ((update %2 == 0) and (update != 0)):
+        epsilon_greedy=epsilon_greedy/2
+        print("RESET epsilon ANNEALING")
+        print(epsilon_greedy)
+    #if ((update %5 == 0) and (update != 0)):
+    #    alpha=alpha/2
+    #    print("RESET alpha ANNEALING")
+    #    print(alpha)
+    if ((update %1000 == 0) and (update != 0)):
+        alpha=alpha/2
+        print("RESET alpha ANNEALING")
+        print(alpha)
+    
+    #    #print(epsilon_greedy)
+    #    print(alpha)
+    #print(state_sample)
+    #update with step-size is already performed, just use new theta values
+    #breakpoint()
+    threshold=threshold/2.0
+    sum_reward = machine_learning_functions.update_theta_SGD_TD(threshold,nn_model,loss_fn, optimizer, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
+    print("TOTAL REWARD")
+    print(sum_reward)
+    #breakpoint()
+    #print(list(nn_model.parameters()))
+    #print("**********************************************************************")
+    #print("EPISODE FINISHED")
+    #print("sum")
+    #print(sum_reward)
+    episodic_reward[update]=sum_reward
+    #print("endSum")
+    #print(list(nn_model.parameters()))
+    #print(list(nn_model.parameters()))
+    #breakpoint()
+#%%
+episodic_reward=episodic_reward[0:update]
+#%%
 v_log_concs = -10 + 10*np.random.rand(nvar) #Vary between 1 M to 1.0e-10 M
 v_log_counts = np.log(v_concs*Concentration2Count)
 
@@ -526,7 +608,7 @@ E_regulation = np.ones(Keq_constant.size)
 down_regulate = True
 nvar = len(v_log_counts)
 
-ipolicy=4#USE 1 or 4
+ipolicy=7 #USE 1 or 4
 
 rxn_reset = 0 * np.ones(Keq_constant.size)
 rxn_use_abs = 0 * np.ones(Keq_constant.size)
@@ -538,9 +620,12 @@ attempts = 100000
 i = 0
 deltaS_value = 10
 delta_S = np.ones(Keq_constant.size)
-
+epr_old=10000
+flux_vector_method_1 = np.zeros(attempts)
 epr_vector_method_1=np.zeros(attempts)
 final_choices1=np.zeros(attempts)
+
+v_log_counts_matrix1 = np.zeros([v_log_counts.size, attempts])
 
 use_abs_step = True
 #somehow first iteration is off. 
@@ -550,187 +635,245 @@ epsilon = 0.0
 variable_concs_begin = np.array(metabolites['Conc'].iloc[0:nvar].values, dtype=np.float64)
 #v_log_concs = -10 + 10*np.random.rand(nvar) #Vary between 1 M to 1.0e-10 M
 #v_concs = np.exp(v_log_concs)
+activity_matrix = np.ones([v_log_counts.size, 10])
 
-v_log_counts = np.log(variable_concs_begin*Concentration2Count)
-while( (i < attempts) and (np.max(delta_S) > 0) ):
-
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
-    #print("Finished optimizing")
-    #Reset variable concentrations after optimization
-    v_log_counts = res_lsq.x
-    log_metabolites = np.append(v_log_counts, f_log_counts)
+total_reward=0
+for test in range(0,1):
+    v_log_counts = np.log(variable_concs_begin*Concentration2Count)
+    while( (i < attempts) and (np.max(delta_S) > 0) ):
     
-    #make calculations to regulate
-    rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
+        #print("Finished optimizing")
+        #Reset variable concentrations after optimization
+        v_log_counts = res_lsq.x
+        log_metabolites = np.append(v_log_counts, f_log_counts)
+        
+        #make calculations to regulate
+        rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
+        
+        #print("np.max(rxn_flux)")
+        #print(np.max(rxn_flux))
+        
+        KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
+        Keq_inverse = np.power(Keq_constant,-1)
+        KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
     
-    print("np.max(rxn_flux)")
-    print(np.max(rxn_flux))
-    
-    KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
-    Keq_inverse = np.power(Keq_constant,-1)
-    KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
-
-    #breakpoint()
-    #Regulation
-    #target_log_concs = np.ones(nvar) * 13.308368285158080
-    delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
-    #if (sum(delta_S>0)==0):
-    #    break
-    if ((delta_S[React_Choice] < 0.0) and 
-        (rxn_use_abs[React_Choice] == 1) and
-        (rxn_reset[React_Choice] > 0)):
-        #then use_abs_step should not have been used. 
-        #reset E_regulation from last step.
-        if (i > 1):
-            E_regulation[React_Choice]=oldE
-            rxn_use_abs[React_Choice]=False
-            rxn_reset[React_Choice] -=1
-                    
-            print("****************************************************************************")
-            print("****************************************************************************")
-            print("****************************************************************************")
-            print("BACKUP")
-            print("****************************************************************************")
-            print("****************************************************************************")
-            print("****************************************************************************")
+        epr = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
         #breakpoint()
+        #Regulation
+        #target_log_concs = np.ones(nvar) * 13.308368285158080
+        delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
+        reward=0
+        if (i > 0):
+            
+            reward = machine_learning_functions.reward_value(v_log_counts, \
+                                                             v_log_counts_matrix1[:,i-1], KQ_f, KQ_r, E_regulation,\
+                                                             delta_S,delta_S_previous)
+            
+        total_reward+=reward 
+        print("reward")
+        print(reward)
+        delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts);
     
-    delta_S_metab = max_entropy_functions.calc_delaS_metab(v_log_counts);
-
-    [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
-    A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, E_regulation )
-    
-    [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
-    
-    React_Choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, delta_S_metab,
-                                        ccc, KQ_f, E_regulation, has_been_up_regulated)
-    
-    if (React_Choice == -1):
-        break
-    #if (React_Choice == 21):
-    #    break
+        [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
+        A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, E_regulation )
         
-    final_choices1[i]=React_Choice
-    
-    #dataFile.v_log_counts=v_log_counts
-    #React_Choice = policy_function( E_regulation,theta_linear,dataFile)
-    
-    rxn_use_abs[React_Choice]=True
-    desired_conc=6.022140900000000e+05
-    
-    oldE = E_regulation[React_Choice]
-    old_delta_S=delta_S
-    #First test abs step, if 
-    
-    use_abs_step = rxn_use_abs[React_Choice]
-    newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, v_log_counts, 
-                           f_log_counts, desired_conc, S_mat, A, rxn_flux, KQ_f, use_abs_step, 
-                           has_been_up_regulated,
-                           delta_S)
-    
+        [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
         
-    E_regulation[React_Choice] = newE
-
-    #if (React_Choice==15):
-    #    E_regulation[15]=0.00018868093532360764
-    #print("rct_choice")
-    #print(React_Choice)
-    #print("newE")
-    #rint(newE)
-    deltaS_value = delta_S[React_Choice]
-    epr = machine_learning_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
-    epr_vector_method_1[i]=epr
+        React_Choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, delta_S_metab,
+                                            ccc, KQ_f, E_regulation,v_log_counts, has_been_up_regulated)
+        
+        if (React_Choice == -1):
+            print("FINISHED OPTIMIZING")
+            break
+        #if (React_Choice == 21):
+        #    break
+            
+        final_choices1[i]=React_Choice
+        
+        #dataFile.v_log_counts=v_log_counts
+        #React_Choice = policy_function( E_regulation,theta_linear,dataFile)
+        
+        rxn_use_abs[React_Choice]=True
+        desired_conc=6.022140900000000e+05
+        
+        oldE = E_regulation[React_Choice]
+        old_delta_S=delta_S
+        #First test abs step, if 
+        
+        use_abs_step = rxn_use_abs[React_Choice]
+        newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, v_log_counts, 
+                               f_log_counts, desired_conc, S_mat, A, rxn_flux, KQ_f, use_abs_step, 
+                               has_been_up_regulated,
+                               delta_S)
+        
+            
+        E_regulation[React_Choice] = newE
     
-    print("entropy_production_rate")
-    print(epr)
-    
-    #print(delta_S)
-    #print(index+1, newEnzReg,delta_S[index])
-    #print('======Next======')
-    i = i+1
-    
-final_choices1=final_choices1[0:i]   
+        #if (React_Choice==15):
+        #    E_regulation[15]=0.00018868093532360764
+        print("rct_choice")
+        print(React_Choice)
+        print("newE")
+        print(newE)
+        deltaS_value = delta_S[React_Choice]
+        epr_vector_method_1[i]=epr
+        flux_vector_method_1[i]=np.sum(rxn_flux)
+        
+        v_log_counts_matrix1[:,i] = v_log_counts
+        
+        #print ("sum_flux")
+        #print(np.sum(rxn_flux))
+        print("entropy_production_rate")
+        print(epr)
+        
+        #if (epr_old < epr):
+            #breakpoint()
+        epr_old=epr
+            #then epr increased
+        
+        #print(index+1, newEnzReg,delta_S[index])
+        #print('======Next======')
+        i = i+1
+        delta_S_previous = delta_S.copy()
+        
+        
+v_log_counts_matrix1 = v_log_counts_matrix1[:,0:i]
+final_choices1=final_choices1[0:i]
 epr_vector_method_1=epr_vector_method_1[0:i]
+flux_vector_method_1=flux_vector_method_1[0:i]
 opt_concs1 = v_log_counts
 E_reg1 = E_regulation
 rxn_flux_1 = rxn_flux
 deltaS1=delta_S
+#
+#%%
 #%%
 #use policy_function
-    
-attempts = 200
-E_regulation =np.ones(Keq_constant.size)
+import random
+attempts = 100
 epr_vector_method_2=np.zeros(attempts)
+flux_vector_method_2=np.zeros(attempts)
 delta_S = np.ones(Keq_constant.size)
-i = 0
+
+epr_old=1000
+KQ_f_old=np.ones(Keq_constant.size)
+E_regulation_old=np.ones(Keq_constant.size)
 epsilon = 0.0
 final_choices2=np.zeros(attempts)
 down_regulate = True
 
-
+v_log_counts_matrix2 = np.zeros([v_log_counts.size, attempts])
 v_log_counts = np.log(v_concs*Concentration2Count)
 #v_log_counts_begin = begin_log_metabolites[0:nvar]
-    
-while( (i < attempts) and (np.max(delta_S) > 0) ):
-#while( (i < attempts) ):
-    
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
-    #print("Finished optimizing")
-    #Reset variable concentrations after optimization
-    v_log_counts = res_lsq.x
-    log_metabolites = np.append(v_log_counts, f_log_counts)
-    
-    #make calculations to regulate
-    rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
-    KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
-    Keq_inverse = np.power(Keq_constant,-1)
-    KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
 
-    #Regulation
-    #target_log_concs = np.ones(nvar) * 13.308368285158080
-    delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
-    delta_S_metab = max_entropy_functions.calc_delaS_metab(v_log_counts);
+KQ_f_old=np.ones(Keq_constant.size)
+KQ_r_old=np.ones(Keq_constant.size)
+
+activity_matrix = np.ones([E_regulation.size, 20])
 
 
-    [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
-    A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, E_regulation )
-    
-
-    React_Choice = machine_learning_functions.policy_function( E_regulation, theta_linear, v_log_counts)
+total_reward=0
+for test in range(0,1):
+    #theta_linear=np.random.uniform(0,1,theta_linear.size)
+    i = 0
+    delta_S = np.ones(Keq_constant.size)
+    E_regulation =np.ones(Keq_constant.size)
+    print(theta_linear)
+    while( (i < attempts) and (np.max(delta_S) > 0) ):
+    #while( (i < attempts) ):
         
-    final_choices2[i]=React_Choice
-    print("rct_choice")
-    print(React_Choice)
-    desired_conc=6.022140900000000e+05
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
+        #print("Finished optimizing")
+        #Reset variable concentrations after optimization
+        v_log_counts = res_lsq.x
+        log_metabolites = np.append(v_log_counts, f_log_counts)
+        
+        #make calculations to regulate
+        rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
+        KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
+        Keq_inverse = np.power(Keq_constant,-1)
+        KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
     
-    oldE = E_regulation[React_Choice]
-    newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, 
-                           v_log_counts, f_log_counts, desired_conc, S_mat, A, 
-                           rxn_flux, KQ_f, False, has_been_up_regulated)
-    if (oldE < newE):
-        print("*****************************************************************************")
+        #Regulation
+        #target_log_concs = np.ones(nvar) * 13.308368285158080
+        delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
+        delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts);
+    
+    
+        [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
+        A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, E_regulation )
+        
+        epr = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
+        
+           
+         
+        
+        #rxn_choices = [i for i in range(Keq_constant.size)]
+        #React_Choice = random.choice(rxn_choices)
+        
         #breakpoint()
-    #print(newE)
-    E_regulation[React_Choice] = newE
-             
-    deltaS_value = delta_S[React_Choice]
-    epr = machine_learning_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
+        
+        x = torch.zeros(1, E_regulation.size)
+        y = torch.zeros(1, 1)
     
-    epr_vector_method_2[i]=epr
-    print("entropy_production_rate")
-    print(epr)
-    print(np.max(rxn_flux))
-    #if (np.max(rxn_flux) < 7.17450933):
-    #    break
-
-    i = i+1
+        for j in range(0,E_regulation.size):
+            x[0][j] = E_regulation[j].copy()
+        
+        [React_Choice, reward] = machine_learning_functions.policy_function(nn_model,E_regulation, theta_linear, v_log_counts)
+        
+        print("reward")
+        print(reward)
+        
+        if (React_Choice==-1):
+            break
+        final_choices2[i]=React_Choice
+        print("rct_choice")
+        print(React_Choice)
+        desired_conc=6.022140900000000e+05
+        
+        oldE = E_regulation[React_Choice]
+        newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, 
+                               v_log_counts, f_log_counts, desired_conc, S_mat, A, 
+                               rxn_flux, KQ_f, False, has_been_up_regulated,\
+                               delta_S)
+        if (oldE < newE):
+            print("*****************************************************************************")
+            #breakpoint()
+        #print(newE)
+                 
+        deltaS_value = delta_S[React_Choice]
+        
+        epr_vector_method_2[i]=epr
+            
+        if (np.max(delta_S) > 0):
+            total_reward+=reward
+            E_regulation[React_Choice] = newE
+        flux_vector_method_2[i]=np.sum(rxn_flux)
+        v_log_counts_matrix2[:,i] = v_log_counts
+        #print("entropy_production_rate")
+        #print("v_log_counts")
+        #print(v_log_counts)
+        print(epr)
+        print(np.max(rxn_flux))
+        print(np.max(delta_S))
+        #if (React_Choice==0):
+        #print(delta_S_metab)
+            
+        #breakpoint()
+        delta_S_previous = delta_S.copy()
+        
+        i = i+1
+    activity_matrix[:,test] = E_regulation
+    
+v_log_counts_matrix2 = v_log_counts_matrix2[:,0:i]
 final_choices2=final_choices2[0:i]
 epr_vector_method_2=epr_vector_method_2[0:i]
+flux_vector_method_2=flux_vector_method_2[0:i]
 opt_concs2 = v_log_counts
 E_reg2 = E_regulation
 rxn_flux_2 = rxn_flux
 deltaS2=delta_S
-
 #%%
     
 

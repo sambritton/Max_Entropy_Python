@@ -52,7 +52,7 @@ np.set_printoptions(suppress=True)#turn off printin
 
 print (cwd)
   
-with open( cwd + '\\TCA_PPP_GLYCOLYSIS_CELLWALL\\TCA_PPP_Glycolysis_CellWall3.dat', 'r') as f:
+with open( cwd + '\\TCA_PPP_GLYCOLYSIS_CELLWALL\\TCA_PPP_Glycolysis_CellWall3b.dat', 'r') as f:
   print(f.read())
     
 
@@ -61,7 +61,7 @@ with open( cwd + '\\TCA_PPP_GLYCOLYSIS_CELLWALL\\TCA_PPP_Glycolysis_CellWall3.da
 
 # In[5]:
 
-fdat = open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\TCA_PPP_Glycolysis_CellWall3.dat', 'r')
+fdat = open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\TCA_PPP_Glycolysis_CellWall3b.dat', 'r')
 
 left ='LEFT'
 right = 'RIGHT'
@@ -173,7 +173,7 @@ if (1):
             [s.replace(':', '') for s in all_cmprts] # remove all the ':'s 
             different_compartments = 0
             for cmpt in all_cmprts:
-                if not re.match(all_cmprts[0], cmpt):
+                if not re.match(all_cmprts[0],cmpt):
                     different_compartments = 1
             if ((not different_compartments) and (reactions[left_compartment].isnull or reactions[right_compartment].isnull)):
                 reactions.loc[idx,left_compartment] = cmpt
@@ -218,28 +218,21 @@ if (0):
     display(dG0_prime, dG0_uncertainty)
 
 if (1):
-    eq_api=ComponentContribution(pH=7.0, ionic_strength=0.25) # loads data
+    eq_api = ComponentContribution(pH=7.0, ionic_strength=0.25)  # loads data
     for idx in reactions.index:
-       
-       #print(idx, flush=True)
+       print(idx, flush=True)
        boltzmann_rxn_str = reactions.loc[idx,'Full Rxn']
-       #print("boltzmann_rxn_str")
-       #print(boltzmann_rxn_str)
-       
        full_rxn_str_no_cmprt = re.sub(':\S+','', boltzmann_rxn_str)
-       #print("full_rxn_str_no_cmprt1")
-       #print(full_rxn_str_no_cmprt)
-       full_rxn_str_no_cmprt = re.sub('BETA-D-GLUCOSE','D-GLUCOSE',full_rxn_str_no_cmprt )
-       #print("full_rxn_str_no_cmprt2")
        print(full_rxn_str_no_cmprt)
-
+       full_rxn_str_no_cmprt = re.sub('BETA-D-GLUCOSE','D-GLUCOSE',full_rxn_str_no_cmprt )
        rxn = reaction_matcher.match(full_rxn_str_no_cmprt)
        if not rxn.check_full_reaction_balancing():
-         print('Reaction %s is not balanced:\n %s\n' % (full_rxn_str_no_cmprt), flush=True)
+         print('Reaction %s is not balanced:\n %s\n' % (idx, full_rxn_str_no_cmprt), flush=True)
        dG0_prime, dG0_uncertainty = eq_api.dG0_prime(rxn)
        display(dG0_prime, dG0_uncertainty)
        reactions.loc[idx,deltag0] = dG0_prime
        reactions.loc[idx,deltag0_sigma] = dG0_uncertainty
+       
 if (0):
     eq_api = ComponentContribution(pH=7.0, ionic_strength=0.25)  # loads data
     rxn_list = []
@@ -277,18 +270,17 @@ display(reactions)
 reactions.loc['PYRt2m',deltag0] = -RT*np.log(10)
 reactions.loc['PYRt2m',deltag0_sigma] = 0
 
-reactions.loc['SUCD1m',deltag0] = 0
+#reactions.loc['SUCD1m',deltag0] = 3.157732e+66
 
 #%%
 # ### Output the Standard Reaction Free Energies for use in a Boltzmann Simulation
 #reaction_file = open('neurospora_aerobic_respiration.keq', 'w')
-reaction_file = open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\TCA_PPP_Glycolysis.keq', 'w')
+reaction_file = open(cwd+'TCA_PPP_Glycolysis_CellWall3b.dg0', 'w')
 for y in reactions.index:
-    print('%s\t%e' % (y, np.exp(-reactions.loc[y,'DGZERO']/RT)),file=reaction_file)
+    print('%s\t%e\t%e' % (y, reactions.loc[y,'DGZERO'], reactions.loc[y,deltag0_sigma]),file=reaction_file)
 reaction_file.close()    
 
-#reaction_file = open('neurospora_aerobic_respiration.equilibrator.dat', 'w')
-reaction_file = open('TCA_PPP_Glycolysis.dat', 'w')
+reaction_file = open('TCA_PPP_Glycolysis_CellWall3b.equilibrator.dat', 'w')
 for y in reactions.index:
     print("REACTION\t",y,file=reaction_file)
     #print(reaction_df[y])
@@ -303,14 +295,12 @@ for y in reactions.index:
             print(x, reactions.loc[y,x],file=reaction_file)
     print("DGZERO-UNITS    KJ/MOL",file=reaction_file)
     print("//",file=reaction_file)
-reaction_file.close()    
-
+reaction_file.close()   
 
 # ## Set Fixed Concentrations/Boundary Conditions
 
-# In[10]:
 
-
+# In[49]:
 
 conc = 'Conc'
 variable = 'Variable'
@@ -318,107 +308,107 @@ metabolites = pd.DataFrame(index = S_active.columns, columns=[conc,variable])
 metabolites[conc] = 0.001
 metabolites[variable] = True
 
-#%% nrxn 6 - = nvar (should be 42)
-metabolites.loc['OXALOACETATE:MITOCHONDRIA',conc] =	1.000000e-03
-metabolites.loc['D-GLUCOSE-1-PHOSPHATE:CYTOSOL',conc] =	1.000000e-03
-metabolites.loc['ALPHA-D-GLUCOSE-6-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['2-PHOSPHO-D-GLYCERATE:CYTOSOL',conc] =	1.000000e-03
-metabolites.loc['BETA-D-GLUCOSE-6-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['ACETYL-COA:MITOCHONDRIA',conc] = 1.000000e-03
-metabolites.loc['D-GLUCONO-1,5-LACTONE_6-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['6-PHOSPHO-D-GLUCONATE:CYTOSOL',conc] =	1.000000e-03
-metabolites.loc['D-RIBULOSE-5-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['D-XYLULOSE-5-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['D-FRUCTOSE_6-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['D-ERYTHROSE-4-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['SEDOHEPTULOSE_1,7-BISPHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['UDP-D-GLUCOSE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['ACETYL-COA:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['N-ACETYL-D-GLUCOSAMINE-6-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['N-ACETYL-D-GLUCOSAMINE-1-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['SEDOHEPTULOSE_7-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['UDP-N-ACETYL-D-GLUCOSAMINE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['D-RIBOSE-5-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['D-GLUCOSAMINE-6-PHOSPHATE:CYTOSOL',conc] =	1.000000e-03
-metabolites.loc['SUCCINATE:MITOCHONDRIA',conc] = 1.000000e-03
-metabolites.loc['2-OXOGLUTARATE:MITOCHONDRIA',conc] = 1.000000e-03
-metabolites.loc['OXALOACETATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['CITRATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['(S)-MALATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['PYRUVATE:MITOCHONDRIA',conc] =	1.000000e-03
-metabolites.loc['D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['D-GLYCERALDEHYDE-3-PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['CITRATE:MITOCHONDRIA',conc] = 1.000000e-03
-metabolites.loc['ISOCITRATE:MITOCHONDRIA',conc] = 1.000000e-03
-metabolites.loc['PYRUVATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['SUCCINYL-COA:MITOCHONDRIA',conc] = 1.000000e-03
-metabolites.loc['PHOSPHOENOLPYRUVATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['FUMARATE:MITOCHONDRIA',conc] = 1.000000e-03
-metabolites.loc['(S)-MALATE:MITOCHONDRIA',conc] = 1.000000e-03
-metabolites.loc['ALPHA-D-GLUCOSE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['3-PHOSPHO-D-GLYCEROYL_PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['GLYCERONE_PHOSPHATE:CYTOSOL',conc] = 1.000000e-03
-metabolites.loc['3-PHOSPHO-D-GLYCERATE:CYTOSOL',conc] = 1.000000e-03
-
-#Fixed
-metabolites.loc['H2O:CYTOSOL',conc] = 5.550000e+01
-metabolites.loc['H2O:CYTOSOL',variable] = False
-metabolites.loc['CHITOBIOSE:CYTOSOL',conc] = 2.000000e-03
-metabolites.loc['CHITOBIOSE:CYTOSOL',variable] = False
-metabolites.loc['UDP:CYTOSOL',conc] = 5.600000e-04
-metabolites.loc['UDP:CYTOSOL',variable] = False
-metabolites.loc['N,N-DIACETYLCHITOBIOSE:CYTOSOL',conc] = 2.000000e-03
-metabolites.loc['N,N-DIACETYLCHITOBIOSE:CYTOSOL',variable] = False
-metabolites.loc['BETA-D-GLUCOSE:CYTOSOL',conc] = 2.000000e-03
-metabolites.loc['BETA-D-GLUCOSE:CYTOSOL',variable] = False
-metabolites.loc['NAD+:MITOCHONDRIA',conc] = 2.600000e-03
-metabolites.loc['NAD+:MITOCHONDRIA',variable] = False
-metabolites.loc['ATP:CYTOSOL',conc] = 9.600000e-03
-metabolites.loc['ATP:CYTOSOL',variable] = False
-metabolites.loc['CELLOBIOSE:CYTOSOL',conc] = 2.000000e-03
-metabolites.loc['CELLOBIOSE:CYTOSOL',variable] = False
-metabolites.loc['COA:MITOCHONDRIA',conc] = 1.400000e-03
-metabolites.loc['COA:MITOCHONDRIA',variable] = False
-metabolites.loc['H2O:MITOCHONDRIA',conc] = 5.550000e+01
-metabolites.loc['H2O:MITOCHONDRIA',variable] = False
-metabolites.loc['DIPHOSPHATE:CYTOSOL',conc] = 2.000000e-02
-metabolites.loc['DIPHOSPHATE:CYTOSOL',variable] = False
-metabolites.loc['NAD+:CYTOSOL',conc] = 2.600000e-03
-metabolites.loc['NAD+:CYTOSOL',variable] = False
-metabolites.loc['1,3-BETA-D-GLUCAN:CYTOSOL',conc] = 2.000000e-03
-metabolites.loc['1,3-BETA-D-GLUCAN:CYTOSOL',variable] = False
-metabolites.loc['N-ACETYL-D-GLUCOSAMINE:CYTOSOL',conc] = 1.000000e-08
-metabolites.loc['N-ACETYL-D-GLUCOSAMINE:CYTOSOL',variable] = False
-metabolites.loc['ADP:CYTOSOL',conc] = 5.600000e-04
-metabolites.loc['ADP:CYTOSOL',variable] = False
-metabolites.loc['NADH:MITOCHONDRIA',conc] = 8.300000e-05
-metabolites.loc['NADH:MITOCHONDRIA',variable] = False
-metabolites.loc['UTP:CYTOSOL',conc] = 9.600000e-03
-metabolites.loc['UTP:CYTOSOL',variable] = False
-metabolites.loc['CO2:CYTOSOL',conc] = 1.000000e-04
-metabolites.loc['CO2:CYTOSOL',variable] = False
-metabolites.loc['NADPH:CYTOSOL',conc] = 8.300000e-05
-metabolites.loc['NADPH:CYTOSOL',variable] = False
-metabolites.loc['NADP+:CYTOSOL',conc] = 2.600000e-03
-metabolites.loc['NADP+:CYTOSOL',variable] = False
-metabolites.loc['NADH:CYTOSOL',conc] = 8.300000e-05
-metabolites.loc['NADH:CYTOSOL',variable] = False
-metabolites.loc['L-GLUTAMINE:CYTOSOL',conc] = 2.000000e-03
-metabolites.loc['L-GLUTAMINE:CYTOSOL',variable] = False
+# Set the fixed metabolites:
 metabolites.loc['ATP:MITOCHONDRIA',conc] = 9.600000e-03
 metabolites.loc['ATP:MITOCHONDRIA',variable] = False
 metabolites.loc['ADP:MITOCHONDRIA',conc] = 5.600000e-04
 metabolites.loc['ADP:MITOCHONDRIA',variable] = False
-metabolites.loc['COA:CYTOSOL',conc] = 1.400000e-03
-metabolites.loc['COA:CYTOSOL',variable] = False
-metabolites.loc['CO2:MITOCHONDRIA',conc] = 1.000000e-04
-metabolites.loc['CO2:MITOCHONDRIA',variable] = False
-metabolites.loc['ORTHOPHOSPHATE:CYTOSOL',conc] = 2.000000e-02
-metabolites.loc['ORTHOPHOSPHATE:CYTOSOL',variable] = False
-metabolites.loc['L-GLUTAMATE:CYTOSOL',conc] = 2.000000e-03
-metabolites.loc['L-GLUTAMATE:CYTOSOL',variable] = False
 metabolites.loc['ORTHOPHOSPHATE:MITOCHONDRIA',conc] = 2.000000e-02
 metabolites.loc['ORTHOPHOSPHATE:MITOCHONDRIA',variable] = False
+
+metabolites.loc['ATP:CYTOSOL',conc] = 9.600000e-03
+metabolites.loc['ATP:CYTOSOL',variable] = False
+metabolites.loc['ADP:CYTOSOL',conc] = 5.600000e-04
+metabolites.loc['ADP:CYTOSOL',variable] = False
+metabolites.loc['ORTHOPHOSPHATE:CYTOSOL',conc] = 2.000000e-02
+metabolites.loc['ORTHOPHOSPHATE:CYTOSOL',variable] = False
+
+metabolites.loc['UTP:CYTOSOL',conc] = 9.600000e-03
+metabolites.loc['UTP:CYTOSOL',variable] = False
+metabolites.loc['UDP:CYTOSOL',conc] = 5.600000e-04
+metabolites.loc['UDP:CYTOSOL',variable] = False
+metabolites.loc['DIPHOSPHATE:CYTOSOL',conc] = 2.000000e-02
+metabolites.loc['DIPHOSPHATE:CYTOSOL',variable] = False
+
+metabolites.loc['NADH:MITOCHONDRIA',conc] = 8.300000e-05
+metabolites.loc['NADH:MITOCHONDRIA',variable] = False
+metabolites.loc['NAD+:MITOCHONDRIA',conc] = 2.600000e-03
+metabolites.loc['NAD+:MITOCHONDRIA',variable] = False
+
+metabolites.loc['NADH:CYTOSOL',conc] = 8.300000e-05
+metabolites.loc['NADH:CYTOSOL',variable] = False
+metabolites.loc['NAD+:CYTOSOL',conc] = 2.600000e-03
+metabolites.loc['NAD+:CYTOSOL',variable] = False
+
+#metabolites.loc['NADPH:MITOCHONDRIAL_MATRIX',conc] = 0.1
+#metabolites.loc['NADPH:MITOCHONDRIAL_MATRIX',variable] = False
+#metabolites.loc['NAPD+:MITOCHONDRIAL_MATRIX',conc] = 0.1
+#metabolites.loc['NAPD+:MITOCHONDRIAL_MATRIX',variable] = False
+
+metabolites.loc['NADPH:CYTOSOL',conc] = 8.300000e-05
+metabolites.loc['NADPH:CYTOSOL',variable] = False
+metabolites.loc['NADP+:CYTOSOL',conc] = 2.600000e-03
+metabolites.loc['NADP+:CYTOSOL',variable] = False
+
+#metabolites.loc['ACETYL-COA:MITOCHONDRIA',conc] = 0.1
+#metabolites.loc['ACETYL-COA:MITOCHONDRIA',variable] = True
+#metabolites.loc['ACETYL-COA:CYTOSOL',conc] = 0.1
+#metabolites.loc['ACETYL-COA:CYTOSOL',variable] = False
+
+metabolites.loc['COA:MITOCHONDRIA',conc] = 1.400000e-03
+metabolites.loc['COA:MITOCHONDRIA',variable] = False
+metabolites.loc['COA:CYTOSOL',conc] = 1.400000e-03
+metabolites.loc['COA:CYTOSOL',variable] = False
+#metabolites.loc['COA:GLYOXYSOME',conc] = 0.1
+#metabolites.loc['COA:GLYOXYSOME',variable] = False
+
+metabolites.loc['CO2:MITOCHONDRIA',conc] = 1.000000e-04
+metabolites.loc['CO2:MITOCHONDRIA',variable] = False
+metabolites.loc['CO2:CYTOSOL',conc] = 1.000000e-04
+metabolites.loc['CO2:CYTOSOL',variable] = False 
+
+metabolites.loc['H2O:MITOCHONDRIA',conc] = 55.5
+metabolites.loc['H2O:MITOCHONDRIA',variable] = False
+metabolites.loc['H2O:CYTOSOL',conc] = 55.5
+metabolites.loc['H2O:CYTOSOL',variable] = False 
+
+# What should the concentration of oxygen in the mitochondrial be?
+#metabolites.loc['OXYGEN:MITOCHONDRIAL_MATRIX','Conc',] = 1.0e-28
+#metabolites.loc['OXYGEN:MITOCHONDRIA',conc] = 1.0e-04
+#metabolites.loc['OXYGEN:MITOCHONDRIA',variable] = False
+#metabolites.loc['OXYGEN:CYTOSOL',conc] = 55.5
+#metabolites.loc['OXYGEN:CYTOSOL',variable] = False 
+
+metabolites.loc['BETA-D-GLUCOSE:CYTOSOL',conc] = 2.0e-03
+metabolites.loc['BETA-D-GLUCOSE:CYTOSOL',variable] = False 
+
+metabolites.loc["CHITOBIOSE:CYTOSOL",conc] = 2.0e-09
+metabolites.loc["CHITOBIOSE:CYTOSOL",variable] = False 
+
+#metabolites.loc["N,N'-DIACETYLCHITOBIOSE:CYTOSOL",conc] = 2.0e-03
+#metabolites.loc["N,N'-DIACETYLCHITOBIOSE:CYTOSOL",variable] = False 
+
+metabolites.loc['1,3-BETA-D-GLUCAN:CYTOSOL',conc] = 2.0e-09
+metabolites.loc['1,3-BETA-D-GLUCAN:CYTOSOL',variable] = False 
+
+metabolites.loc['L-GLUTAMINE:CYTOSOL',conc] = 2.0e-03
+metabolites.loc['L-GLUTAMINE:CYTOSOL',variable] = False 
+metabolites.loc['L-GLUTAMATE:CYTOSOL',conc] = 2.0e-04
+metabolites.loc['L-GLUTAMATE:CYTOSOL',variable] = False
+metabolites.loc['CELLOBIOSE:CYTOSOL',conc] = 2.0e-04
+metabolites.loc['CELLOBIOSE:CYTOSOL',variable] = False 
+
+metabolites.loc['N-ACETYL-D-GLUCOSAMINE:CYTOSOL',conc] = 1.0e-08
+metabolites.loc['N-ACETYL-D-GLUCOSAMINE:CYTOSOL',variable] = False 
+
+
+nvariables = metabolites[metabolites[variable]].count()
+nvar = nvariables[variable]
+
+metabolites.sort_values(by=variable, axis=0,ascending=False, inplace=True,)
+display(metabolites)
+
+
 #%%
 nvariables = metabolites[metabolites[variable]].count()
 nvar = nvariables[variable]
@@ -546,10 +536,10 @@ newE = max_entropy_functions.calc_reg_E_step(E_regulation,React_Choice, nvar, re
 delta_S = max_entropy_functions.calc_deltaS(res_lsq1.x, f_log_counts, S_mat, KQ_f)
 
 target_log_concs = np.ones(nvar) * 13.308368285158080
-delta_S_metab = max_entropy_functions.calc_delaS_metab(res_lsq1.x);
+delta_S_metab = max_entropy_functions.calc_deltaS_metab(res_lsq1.x);
 
-ipolicy = 4 #use ipolicy=1 or 4
-reaction_choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ_f, E_regulation,
+ipolicy = 7 #use ipolicy=1 or 4
+reaction_choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ_f, E_regulation,res_lsq1.x,
                                                         has_been_up_regulated)
 
 display(newE)
@@ -559,29 +549,14 @@ display(reaction_choice)
   
 #%% Learn theta_linear
 
-#TCA_PPP_Glycolysis_cell wall without gogat gamma=0.75, m=1, lop=10, epsilon greedy
-#Delta_S value function
-theta_linear=np.array([ 0.210013  ,  0.01949418, -0.12566511,  0.09996117,  0.15719931,
-        0.17879126,  0.16852339,  0.0726833 , -0.0174334 , -0.00031908,
-       -0.09552648, -0.08953069, -0.00362727,  0.05174328, -0.14141594,
-        0.06749798,  0.00236211,  0.04920843, -0.16593684,  0.07778623,
-        0.17829143,  0.11223961, -0.05529051, -0.01206809, -0.0372327 ,
-       -0.13892892, -0.13750913, -0.12112517,  0.00098687, -0.15174624,
-       -0.00398624, -0.00507546,  0.09306657,  0.02464172, -0.11022116,
-        0.00132381,  0.00683007,  0.0207841 , -0.04812656,  0.050641  ,
-       -0.02067271,  0.01339449, -0.15572199, -0.16068112,  0.01487923,
-        0.03619071,  0.08584804,  0.28425137])
-    
-#EPR value function
 #%%
     
 import machine_learning_functions
 
-gamma = 0.75
-num_samples = 1 #number of state samples theta_linear attempts to fit to in a single iteration
-length_of_path = 10 #length of path after 1 forced step
-epsilon_greedy = 0.5
-theta_linear = np.zeros(Keq_constant.size)
+gamma = 0.8
+num_samples = 10 #number of state samples theta_linear attempts to fit to in a single iteration
+length_of_path = 5 #length of path after 1 forced step
+epsilon_greedy = 0.00
 
 #set variables in ML program
 machine_learning_functions.Keq_constant = Keq_constant
@@ -601,21 +576,88 @@ machine_learning_functions.num_samples = num_samples
 machine_learning_functions.length_of_path = length_of_path
 
 #%%
-updates = 2500 #attempted iterations to update theta_linear
+import torch
+torch.autograd.set_detect_anomaly(True)
+N, D_in, H, D_out = 1, Keq_constant.size, 100, 1
+
+# Create random Tensors to hold inputs and outputs
+x_in = torch.zeros(N, D_in)
+y_in = torch.zeros(N, D_out)
+
+nn_model = torch.nn.Sequential(
+        torch.nn.Linear(D_in, H),
+        torch.nn.ReLU(),
+        torch.nn.Linear(H,H),
+        torch.nn.ReLU(),
+        torch.nn.Linear(H,H),
+        torch.nn.ReLU(),
+        torch.nn.Linear(H, D_out),
+        )
+#%% SGD UPDATE TEST
+theta_length = Keq_constant.size
+all_theta_values = np.zeros([theta_length,2500])
+theta_linear = np.zeros(theta_length)
+alpha = 0.00001
+updates = 25000 #attempted iterations to update theta_linear
 v_log_counts = v_log_counts_stationary.copy()
+
+epsilon_greedy = 0.05
+
+n_back_step = 10 #these steps use rewards. Total steps before n use state values
+machine_learning_functions.length_of_path = n_back_step+4
+
 for update in range(0,updates):
     
-    #annealing test
-    if ((update %50 == 0) and (update != 0)):
-        epsilon_greedy = epsilon_greedy/2.0
-        print("RESET EPSILON ANNEALING")
-        print(epsilon_greedy)
-    new_theta = machine_learning_functions.update_theta(theta_linear,v_log_counts, epsilon_greedy)
-    diff = theta_linear-new_theta
-    theta_linear = new_theta
-    print(np.sum(diff))
-    
+    #generate state to use
+    state_is_valid = False
+    state_sample = np.zeros(Keq_constant.size)
+    for sample in range(0,len(state_sample)):
+        state_sample[sample] = np.random.uniform(1,1)
 
+    #annealing test
+    if ((update %20 == 0) and (update != 0)):
+        epsilon_greedy=epsilon_greedy/2
+        print("RESET epsilon ANNEALING")
+        print(epsilon_greedy)
+    #if ((update %5 == 0) and (update != 0)):
+    #    alpha=alpha/2
+    #    print("RESET alpha ANNEALING")
+    #    print(alpha)
+    if ((update %1000 == 0) and (update != 0)):
+        alpha=alpha/2
+        print("RESET alpha ANNEALING")
+        print(alpha)
+    
+    #    #print(epsilon_greedy)
+    #    print(alpha)
+    #print(state_sample)
+    #update with step-size is already performed, just use new theta values
+    #breakpoint()
+    
+    new_theta = machine_learning_functions.update_theta_SGD_TD(x_in,y_in,nn_model, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
+    #new_theta = machine_learning_functions.update_theta_SGD( alpha, theta_linear, v_log_counts, epsilon_greedy, state_sample)
+    #breakpoint()
+    diff = np.abs(theta_linear-new_theta)
+    theta_linear = new_theta
+    print("**********************************************************************")
+    print("EPISODE FINISHED")
+    print(np.sum(diff))
+    print(theta_linear)
+    #time.sleep(5)
+    all_theta_values[:,update] = theta_linear
+    #breakpoint()
+    #%%
+#idea: lop to low -> not smart enough, lop to high->biased
+
+
+#%%    
+all_theta_values=all_theta_values[:,0:update]
+#%%plot theta over time
+fig = plt.figure(figsize=(10, 10))
+ax1 = fig.add_subplot(111)
+for j in range(0, all_theta_values.shape[0]):
+    ax1.plot(all_theta_values[j,:])
+    
 #%%
 
 v_log_concs = -10 + 10*np.random.rand(nvar) #Vary between 1 M to 1.0e-10 M
@@ -626,7 +668,7 @@ E_regulation = np.ones(Keq_constant.size)
 down_regulate = True
 nvar = len(v_log_counts)
 
-ipolicy=4#USE 1 or 4
+ipolicy=7 #USE 1 or 4
 
 rxn_reset = 0 * np.ones(Keq_constant.size)
 rxn_use_abs = 0 * np.ones(Keq_constant.size)
@@ -638,9 +680,12 @@ attempts = 100000
 i = 0
 deltaS_value = 10
 delta_S = np.ones(Keq_constant.size)
-
+epr_old=10000
+flux_vector_method_1 = np.zeros(attempts)
 epr_vector_method_1=np.zeros(attempts)
 final_choices1=np.zeros(attempts)
+
+v_log_counts_matrix1 = np.zeros([v_log_counts.size, attempts])
 
 use_abs_step = True
 #somehow first iteration is off. 
@@ -650,182 +695,239 @@ epsilon = 0.0
 variable_concs_begin = np.array(metabolites['Conc'].iloc[0:nvar].values, dtype=np.float64)
 #v_log_concs = -10 + 10*np.random.rand(nvar) #Vary between 1 M to 1.0e-10 M
 #v_concs = np.exp(v_log_concs)
+activity_matrix = np.ones([v_log_counts.size, 10])
 
-v_log_counts = np.log(variable_concs_begin*Concentration2Count)
-while( (i < attempts) and (np.max(delta_S) > 0) ):
-
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
-    #print("Finished optimizing")
-    #Reset variable concentrations after optimization
-    v_log_counts = res_lsq.x
-    log_metabolites = np.append(v_log_counts, f_log_counts)
+total_reward=0
+for test in range(0,1):
+    v_log_counts = np.log(variable_concs_begin*Concentration2Count)
+    while( (i < attempts) and (np.max(delta_S) > 0) ):
     
-    #make calculations to regulate
-    rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
+        #print("Finished optimizing")
+        #Reset variable concentrations after optimization
+        v_log_counts = res_lsq.x
+        log_metabolites = np.append(v_log_counts, f_log_counts)
+        
+        #make calculations to regulate
+        rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
+        
+        #print("np.max(rxn_flux)")
+        #print(np.max(rxn_flux))
+        
+        KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
+        Keq_inverse = np.power(Keq_constant,-1)
+        KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
     
-    print("np.max(rxn_flux)")
-    print(np.max(rxn_flux))
-    
-    KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
-    Keq_inverse = np.power(Keq_constant,-1)
-    KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
-
-    #breakpoint()
-    #Regulation
-    #target_log_concs = np.ones(nvar) * 13.308368285158080
-    delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
-    #if (sum(delta_S>0)==0):
-    #    break
-    if ((delta_S[React_Choice] < 0.0) and 
-        (rxn_use_abs[React_Choice] == 1) and
-        (rxn_reset[React_Choice] > 0)):
-        #then use_abs_step should not have been used. 
-        #reset E_regulation from last step.
-        if (i > 1):
-            E_regulation[React_Choice]=oldE
-            rxn_use_abs[React_Choice]=False
-            rxn_reset[React_Choice] -=1
-                    
-            print("****************************************************************************")
-            print("****************************************************************************")
-            print("****************************************************************************")
-            print("BACKUP")
-            print("****************************************************************************")
-            print("****************************************************************************")
-            print("****************************************************************************")
+        epr = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
         #breakpoint()
-    
-    delta_S_metab = max_entropy_functions.calc_delaS_metab(v_log_counts);
-
-    [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
-    A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, E_regulation )
-    
-    [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
-    
-    React_Choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, delta_S_metab,
-                                        ccc, KQ_f, E_regulation, has_been_up_regulated)
-    
-    if (React_Choice == -1):
-        break
-    #if (React_Choice == 21):
-    #    break
+        #Regulation
+        #target_log_concs = np.ones(nvar) * 13.308368285158080
+        delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
+        reward=0
+        if (i > 0):
+            
+            reward = machine_learning_functions.reward_value(v_log_counts, \
+                                                             v_log_counts_matrix1[:,i-1], KQ_f, KQ_r, E_regulation,\
+                                                             delta_S,delta_S_previous)
+            
+        total_reward+=reward 
         
-    final_choices1[i]=React_Choice
+        delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts);
     
-    #dataFile.v_log_counts=v_log_counts
-    #React_Choice = policy_function( E_regulation,theta_linear,dataFile)
-    
-    rxn_use_abs[React_Choice]=True
-    desired_conc=6.022140900000000e+05
-    
-    oldE = E_regulation[React_Choice]
-    old_delta_S=delta_S
-    #First test abs step, if 
-    
-    use_abs_step = rxn_use_abs[React_Choice]
-    newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, v_log_counts, 
-                           f_log_counts, desired_conc, S_mat, A, rxn_flux, KQ_f, use_abs_step, 
-                           has_been_up_regulated,
-                           delta_S)
-    
+        [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
+        A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, E_regulation )
         
-    E_regulation[React_Choice] = newE
-
-    #if (React_Choice==15):
-    #    E_regulation[15]=0.00018868093532360764
-    #print("rct_choice")
-    #print(React_Choice)
-    #print("newE")
-    #rint(newE)
-    deltaS_value = delta_S[React_Choice]
-    epr = machine_learning_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
-    epr_vector_method_1[i]=epr
+        [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
+        
+        React_Choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, delta_S_metab,
+                                            ccc, KQ_f, E_regulation,v_log_counts, has_been_up_regulated)
+        
+        if (React_Choice == -1):
+            print("FINISHED OPTIMIZING")
+            break
+        #if (React_Choice == 21):
+        #    break
+            
+        final_choices1[i]=React_Choice
+        
+        #dataFile.v_log_counts=v_log_counts
+        #React_Choice = policy_function( E_regulation,theta_linear,dataFile)
+        
+        rxn_use_abs[React_Choice]=True
+        desired_conc=6.022140900000000e+05
+        
+        oldE = E_regulation[React_Choice]
+        old_delta_S=delta_S
+        #First test abs step, if 
+        
+        use_abs_step = rxn_use_abs[React_Choice]
+        newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, v_log_counts, 
+                               f_log_counts, desired_conc, S_mat, A, rxn_flux, KQ_f, use_abs_step, 
+                               has_been_up_regulated,
+                               delta_S)
+        
+            
+        E_regulation[React_Choice] = newE
     
-    print("entropy_production_rate")
-    print(epr)
-    
-    #print(delta_S)
-    #print(index+1, newEnzReg,delta_S[index])
-    #print('======Next======')
-    i = i+1
-    
-final_choices1=final_choices1[0:i]   
+        #if (React_Choice==15):
+        #    E_regulation[15]=0.00018868093532360764
+        print("rct_choice")
+        print(React_Choice)
+        print("newE")
+        print(newE)
+        deltaS_value = delta_S[React_Choice]
+        epr_vector_method_1[i]=epr
+        flux_vector_method_1[i]=np.sum(rxn_flux)
+        
+        v_log_counts_matrix1[:,i] = v_log_counts
+        
+        #print ("sum_flux")
+        #print(np.sum(rxn_flux))
+        print("entropy_production_rate")
+        print(epr)
+        
+        #if (epr_old < epr):
+            #breakpoint()
+        epr_old=epr
+            #then epr increased
+        print(delta_S)
+        #print(index+1, newEnzReg,delta_S[index])
+        #print('======Next======')
+        i = i+1
+        delta_S_previous = delta_S.copy()
+        
+        
+v_log_counts_matrix1 = v_log_counts_matrix1[:,0:i]
+final_choices1=final_choices1[0:i]
 epr_vector_method_1=epr_vector_method_1[0:i]
+flux_vector_method_1=flux_vector_method_1[0:i]
 opt_concs1 = v_log_counts
 E_reg1 = E_regulation
 rxn_flux_1 = rxn_flux
 deltaS1=delta_S
 #%%
 #use policy_function
-    
-attempts = 200
-E_regulation =np.ones(Keq_constant.size)
+import random
+attempts = 100
 epr_vector_method_2=np.zeros(attempts)
+flux_vector_method_2=np.zeros(attempts)
 delta_S = np.ones(Keq_constant.size)
-i = 0
+
+epr_old=1000
+KQ_f_old=np.ones(Keq_constant.size)
+E_regulation_old=np.ones(Keq_constant.size)
 epsilon = 0.0
 final_choices2=np.zeros(attempts)
 down_regulate = True
 
-
+v_log_counts_matrix2 = np.zeros([v_log_counts.size, attempts])
 v_log_counts = np.log(v_concs*Concentration2Count)
 #v_log_counts_begin = begin_log_metabolites[0:nvar]
-    
-while( (i < attempts) and (np.max(delta_S) > 0) ):
-#while( (i < attempts) ):
-    
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
-    #print("Finished optimizing")
-    #Reset variable concentrations after optimization
-    v_log_counts = res_lsq.x
-    log_metabolites = np.append(v_log_counts, f_log_counts)
-    
-    #make calculations to regulate
-    rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
-    KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
-    Keq_inverse = np.power(Keq_constant,-1)
-    KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
 
-    #Regulation
-    #target_log_concs = np.ones(nvar) * 13.308368285158080
-    delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
-    delta_S_metab = max_entropy_functions.calc_delaS_metab(v_log_counts);
+KQ_f_old=np.ones(Keq_constant.size)
+KQ_r_old=np.ones(Keq_constant.size)
+
+activity_matrix = np.ones([E_regulation.size, 20])
 
 
-    [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
-    A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, E_regulation )
-    
-
-    React_Choice = machine_learning_functions.policy_function( E_regulation, theta_linear, v_log_counts)
+total_reward=0
+for test in range(0,1):
+    #theta_linear=np.random.uniform(0,1,theta_linear.size)
+    i = 0
+    delta_S = np.ones(Keq_constant.size)
+    E_regulation =np.ones(Keq_constant.size)
+    print(theta_linear)
+    while( (i < attempts) and (np.max(delta_S) > 0) ):
+    #while( (i < attempts) ):
         
-    final_choices2[i]=React_Choice
-    print("rct_choice")
-    print(React_Choice)
-    desired_conc=6.022140900000000e+05
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
+        #print("Finished optimizing")
+        #Reset variable concentrations after optimization
+        v_log_counts = res_lsq.x
+        log_metabolites = np.append(v_log_counts, f_log_counts)
+        
+        #make calculations to regulate
+        rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
+        KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
+        Keq_inverse = np.power(Keq_constant,-1)
+        KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
     
-    oldE = E_regulation[React_Choice]
-    newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, 
-                           v_log_counts, f_log_counts, desired_conc, S_mat, A, 
-                           rxn_flux, KQ_f, False, has_been_up_regulated)
-    if (oldE < newE):
-        print("*****************************************************************************")
+        #Regulation
+        #target_log_concs = np.ones(nvar) * 13.308368285158080
+        delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
+        delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts);
+    
+    
+        [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
+        A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, E_regulation )
+        
+        epr = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
+        
+        reward=0
+        if (i > 0):
+            
+            reward = machine_learning_functions.reward_value(v_log_counts, \
+                                                             v_log_counts_matrix1[:,i-1], KQ_f, KQ_r, E_regulation,\
+                                                             delta_S,delta_S_previous)
+            
+        total_reward+=reward 
+        
+        #rxn_choices = [i for i in range(Keq_constant.size)]
+        #React_Choice = random.choice(rxn_choices)
+        
         #breakpoint()
-    #print(newE)
-    E_regulation[React_Choice] = newE
-             
-    deltaS_value = delta_S[React_Choice]
-    epr = machine_learning_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
+        
+        x = torch.zeros(1, E_regulation.size)
+        y = torch.zeros(1, 1)
     
-    epr_vector_method_2[i]=epr
-    print("entropy_production_rate")
-    print(epr)
-    print(np.max(rxn_flux))
+        for j in range(0,E_regulation.size):
+            x[0][j] = E_regulation[j].copy()
+            
+        React_Choice = machine_learning_functions.policy_function( x,y,nn_model,E_regulation, theta_linear, v_log_counts)
+            
+        final_choices2[i]=React_Choice
+        print("rct_choice")
+        print(React_Choice)
+        desired_conc=6.022140900000000e+05
+        
+        oldE = E_regulation[React_Choice]
+        newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, 
+                               v_log_counts, f_log_counts, desired_conc, S_mat, A, 
+                               rxn_flux, KQ_f, False, has_been_up_regulated,\
+                               delta_S)
+        if (oldE < newE):
+            print("*****************************************************************************")
+            #breakpoint()
+        #print(newE)
+                 
+        deltaS_value = delta_S[React_Choice]
+        
+        epr_vector_method_2[i]=epr
+            
+        
+        E_regulation[React_Choice] = newE
+        flux_vector_method_2[i]=np.sum(rxn_flux)
+        v_log_counts_matrix2[:,i] = v_log_counts
+        #print("entropy_production_rate")
+        #print("v_log_counts")
+        #print(v_log_counts)
+        print(epr)
+        print(np.max(rxn_flux))
+        print(np.max(delta_S))
+        #if (React_Choice==0):
+        #print(delta_S_metab)
+        #breakpoint()
+            
 
-    i = i+1
-
-
+        delta_S_previous = delta_S.copy()
+        
+        i = i+1
+    activity_matrix[:,test] = E_regulation
+    
+v_log_counts_matrix2 = v_log_counts_matrix2[:,0:i]
 final_choices2=final_choices2[0:i]
 epr_vector_method_2=epr_vector_method_2[0:i]
+flux_vector_method_2=flux_vector_method_2[0:i]
 opt_concs2 = v_log_counts
 E_reg2 = E_regulation
 rxn_flux_2 = rxn_flux
@@ -970,8 +1072,8 @@ ax5.set_xlabel('Reactions',fontsize = Fontsize_Sub)
 ax5.set_ylabel(r'$\Delta$S_mat',fontsize = Fontsize_Sub)
 #fig.suptitle(r'Fiber Density = 1 $\mu m^{-3}, ' '$ $W_{s} = %s$' %(temp) )
 
-ax1.legend(fontsize=Fontsize_Leg, loc='lower right')
-ax2.legend(fontsize=Fontsize_Leg, loc='lower right')
+ax1.legend(fontsize=Fontsize_Leg, loc='lower left')
+ax2.legend(fontsize=Fontsize_Leg, loc='lower left')
 ax3.legend(fontsize=Fontsize_Leg,loc='lower left')
 ax4.legend(fontsize=Fontsize_Leg,loc='lower left')
 ax5.legend(fontsize=Fontsize_Leg,loc='upper left')

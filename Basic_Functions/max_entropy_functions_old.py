@@ -38,16 +38,27 @@ def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
     KQ_r_reg = E_Regulation * KQ_r
     sumOdds = np.sum(KQ_f_reg) + np.sum(KQ_r_reg)
 
-    kq_ge1_idx = np.where(KQ_f >= 1)
-    kq_le1_idx = np.where(KQ_f < 1)
-    kq_inv_ge1_idx = np.where(KQ_r > 1)
-    kq_inv_le1_idx = np.where(KQ_r <= 1)
+    kq_ge1_idx, = np.where(KQ_f >= 1)
+    kq_le1_idx, = np.where(KQ_f < 1)
+    kq_inv_ge1_idx, = np.where(KQ_r > 1)
+    kq_inv_le1_idx, = np.where(KQ_r <= 1)
     #epr = +np.sum(KQ_f_reg * safe_ln(KQ_f_reg))/sumOdds + np.sum(KQ_r_reg * safe_ln(KQ_r_reg))/sumOdds
-    epr = +np.sum(KQ_f_reg[kq_ge1_idx] * safe_ln(KQ_f[kq_ge1_idx]))/sumOdds \
-          -np.sum(KQ_f_reg[kq_le1_idx] * safe_ln(KQ_f[kq_le1_idx]))/sumOdds \
-          -np.sum(KQ_r_reg[kq_inv_le1_idx] * safe_ln(KQ_r[kq_inv_le1_idx]))/sumOdds \
-          +np.sum(KQ_r_reg[kq_inv_ge1_idx] * safe_ln(KQ_r[kq_inv_ge1_idx]))/sumOdds
-    return epr
+    
+    #breakpoint()
+    val=0
+    if (kq_ge1_idx.size>0):
+        val[kq_ge1_idx] += np.sum(KQ_f_reg[kq_ge1_idx] * np.log(KQ_f[kq_ge1_idx]))/sumOdds
+        
+    if (kq_le1_idx.size>0):
+        val[kq_le1_idx] -= np.sum(KQ_f_reg[kq_le1_idx] * np.log(KQ_f[kq_le1_idx]))/sumOdds
+        
+    if (kq_inv_le1_idx.size>0):
+        val[kq_inv_le1_idx] -= np.sum(KQ_r_reg[kq_inv_le1_idx] * np.log(KQ_r[kq_inv_le1_idx]))/sumOdds
+        
+    if (kq_inv_ge1_idx.size>0):
+        val[kq_inv_ge1_idx] += np.sum(KQ_r_reg[kq_inv_ge1_idx] * np.log(KQ_r[kq_inv_ge1_idx]))/sumOdds
+        
+    return val
 
 def derivatives(log_vcounts,log_fcounts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, E_Regulation):
     
@@ -226,12 +237,14 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
     reaction_choice=-1
     
     down_regulate = True
+    tolerance = 1.0e-05
+    
     #take positive and negative indices in metabolite errors
-    S_index, = np.where(delta_S > -np.inf) 
-    sm_idx, = np.where(delta_S_metab > 0.0) #reactions that have bad values 
+    S_index, = np.where(delta_S > tolerance) 
+    sm_idx, = np.where(delta_S_metab > tolerance) #reactions that have bad values 
 
-    S_index_neg, = np.where(delta_S < 0.0) 
-    sm_idx_neg, = np.where(delta_S_metab < 0.0) #reactions that have bad values 
+    S_index_neg, = np.where(delta_S < tolerance) 
+    sm_idx_neg, = np.where(delta_S_metab < tolerance) #reactions that have bad values 
     
     if ( (S_index.size!=0) and (sm_idx.size!=0 ) and (S_index_neg.size !=0) and (sm_idx_neg.size !=0) ):
         
@@ -363,15 +376,26 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
             DeltaAlpha = 0.001; # must be small enough such that the arguement
                                 # of the log below is > 0
             DeltaDeltaS = -np.log(1 - DeltaAlpha*np.divide(dx,v_counts[sm_idx]))
+            
             DeltaDeltaS_neg = -np.log(1 - DeltaAlpha*np.divide(dx_neg,v_counts[sm_idx_neg]))
             
             index3 = np.argmax(np.sum(DeltaDeltaS, axis=1)) #sum along rows (i.e. metabolites)
             reaction_choice = S_index[index3]
             val = np.max(np.sum(DeltaDeltaS, axis=1))
+            x = temp_x[:,index3]
+            #print("x")
+            #print(x)
+            #print("sm_idx")
+            #print(sm_idx)
             
             index3_neg = np.argmax(np.sum(DeltaDeltaS_neg, axis=1))
             reaction_choice_neg = S_index_neg[index3_neg]
             val_neg = 0#np.max(np.sum(temp_x_neg, axis=0))
+            #breakpoint()
+            #print("alternate choice")
+            #print(S_index[index3_neg])
+            #breakpoint()
+            #use index from larger value
             
             if (abs(val) >= abs(val_neg)):
                 reaction_choice = reaction_choice
@@ -417,7 +441,7 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
     fcounts = np.exp(log_fcounts)
     E=E_vec[React_Choice]
     
-        
+    
     metabolite_counts = np.append(vcounts, fcounts)
     S_T=S_mat.T
     B=np.linalg.pinv(A[0:nvar,0:nvar])
@@ -438,6 +462,7 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
 
     E_choices=np.ones(len(prod_indices));
 
+
     newE1=1.0
     if (np.size(E_choices) == 0 ):
         newE = E
@@ -454,15 +479,15 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
             TEMP2=np.matmul(-B[prod_index,:],  TEMP )
     
             deltaE = E * (dx_j/x_j_eq) * TEMP2
-            #print("DELTA_E")
-            #print(deltaE)
-            #if (desired_conc > metabolite_counts[prod_indices[i] ]):
+            
+            if (desired_conc > metabolite_counts[prod_indices[i] ]):
                 #then there is no need to regulate
                 #print("no need to regulate reaction: ")
                 #print(React_Choice)
                 
-                #deltaE=0
-                
+                deltaE=0
+
+            
             E_choices[i] = deltaE;
             
         #finallly, choose one of them
@@ -472,24 +497,26 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
         delta_E_Final = E_choices[idx]
         
         newE = E - (delta_E_Final)
-
-        tolerance = 1.0e-07
-        if ((newE < 0) or (newE > 1.0)):
+        #if (React_Choice == 12):
+            #if (desired_conc < metabolite_counts[prod_indices[i] ]):
+                #breakpoint()
+        
+        if ((newE1 < 0) or (newE1 > 1.0)):
             #reset if out of bounds          
             #print("*********************************************************")
             #print("BAD ACTIVITY STEP CHOICE")
             #print(newE1)
-            newE=E
+            newE1 = E/2
         
         if (method == 1):
-            if(delta_S_val_method1 > tolerance):
+            if(delta_S_val_method1 > 0.000001):
                 newE = E/2
             elif (use_abs_step==True):
                 newE = E - abs(delta_E_Final)
-                if(newE < 0) or (newE > 1):                    
+                if(newE < 0):                    
                     newE = E/2
             else:
                 newE = E - (delta_E_Final)         
-                if(newE < 0) or (newE > 1):
+                if(newE < 0):
                     newE = E/2
     return newE
