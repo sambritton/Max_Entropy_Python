@@ -208,7 +208,9 @@ def calc_deltaS_metab(v_log_counts, *args):
     #initialize
     target_v_log_counts = np.ones(len(v_log_counts))
     if (nargin < 1):
-        target_v_log_counts = np.ones(len(v_log_counts)) * np.log(0.001*6.022140857e+23*1.0e-15);
+        #target_v_log_counts = np.ones(len(v_log_counts)) * np.log(0.001*6.022140857e+23*1.0e-15);
+        
+        target_v_log_counts = np.ones(len(v_log_counts)) * np.log(6.022140900000000e+05);
     else:
         target_v_log_counts = varargin;
     
@@ -483,13 +485,13 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
         
         if (method == 1):
             if(delta_S_val_method1 > tolerance):
-                newE = E/2
+                newE = E - E/20
             elif (use_abs_step==True):
                 newE = E - abs(delta_E_Final)
                 if(newE < 0) or (newE > 1):                    
-                    newE = E/2
+                    newE = E - E/20
             else:
                 newE = E - (delta_E_Final)         
                 if(newE < 0) or (newE > 1):
-                    newE = E/2
+                    newE = E - E/20
     return newE
