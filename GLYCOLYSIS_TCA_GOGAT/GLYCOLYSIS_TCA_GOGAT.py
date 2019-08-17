@@ -522,10 +522,6 @@ reaction_choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, de
 display(newE)
 display(reaction_choice)
 
-    
-#%% Learn theta_linear
-
-
 #%%
  
 import machine_learning_functions
@@ -556,15 +552,14 @@ machine_learning_functions.length_of_path = length_of_path
 
 #%%
 import torch
-N, D_in, H, D_out = 1, Keq_constant.size,  Keq_constant.size, 1
+N, D_in, H, D_out = 1, Keq_constant.size,  10*Keq_constant.size, 1
 
 # Create random Tensors to hold inputs and outputs
 x_in = torch.zeros(N, D_in)
 y_in = torch.zeros(N, D_out)
 
 # Create random Tensors to hold inputs and outputs
-x = torch.randn(1,1, D_in)
-y = torch.randn(1,1, D_out)
+x = 10*torch.rand(1000,1, D_in)
 
 # =============================================================================
 # nn_model = torch.nn.Sequential(
@@ -575,7 +570,7 @@ y = torch.randn(1,1, D_out)
 #         torch.nn.ReLU(),
 #         torch.nn.MaxPool1d(2),
 #         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=1, padding=0),
-#         torch.nn.ReLU(),
+#         torch.nn.LeakyReLU(),
 #         torch.nn.MaxPool1d(2),
 #         
 #         torch.nn.Linear(23, D_out)
@@ -585,7 +580,7 @@ y = torch.randn(1,1, D_out)
 nn_model = torch.nn.Sequential(
         torch.nn.Linear(D_in, H),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(H, D_out))
+        torch.nn.Linear(H,D_out))
 # =============================================================================
 # 
 # nn_model = torch.nn.Sequential(
@@ -593,20 +588,31 @@ nn_model = torch.nn.Sequential(
 # =============================================================================
 
 loss_fn = torch.nn.MSELoss(reduction='sum')
-alpha = 0.0001
-print(list(nn_model.parameters()))           
-optimizer = torch.optim.Adam(nn_model.parameters(), lr=alpha)
+alpha = 1e-1
+print(list(nn_model.parameters()))
+#optimizer = torch.optim.Adam(nn_model.parameters(), lr=alpha)
+
+optimizer = torch.optim.SGD(nn_model.parameters(), lr=1e-4, momentum=0.9)
+
+#optimizer = torch.optim.LBFGS(nn_model.parameters(), lr=alpha, max_iter=10,tolerance_change=1e-300)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+
 #%% SGD UPDATE TEST
 theta_linear=[]
 updates = 25000 #attempted iterations to update theta_linear
 v_log_counts = v_log_counts_stationary.copy()
 episodic_loss = np.zeros(updates)
 episodic_reward = np.zeros(updates)
-epsilon_greedy = 0.0
+episodic_prediction = np.zeros(updates)
+episodic_prediction_changing = np.zeros(updates)
+epsilon_greedy = 0.05
 
 n_back_step = 8 #these steps use rewards. Total steps before n use state values
-threshold=500
+
 for update in range(0,updates):
+    
+    x_changing = 10*torch.rand(1000,1, D_in)
+
     
     #generate state to use
     state_is_valid = False
@@ -615,31 +621,33 @@ for update in range(0,updates):
         state_sample[sample] = np.random.uniform(1,1)
 
     #annealing test
-    if ((update %2 == 0) and (update != 0)):
+    if ((update %10 == 0) and (update != 0)):
         epsilon_greedy=epsilon_greedy/2
         print("RESET epsilon ANNEALING")
         print(epsilon_greedy)
-    #if ((update %5 == 0) and (update != 0)):
-    #    alpha=alpha/2
-    #    print("RESET alpha ANNEALING")
-    #    print(alpha)
-    if ((update %1000 == 0) and (update != 0)):
-        alpha=alpha/2
-        print("RESET alpha ANNEALING")
-        print(alpha)
+
     
-    #    #print(epsilon_greedy)
-    #    print(alpha)
-    #print(state_sample)
-    #update with step-size is already performed, just use new theta values
-    #breakpoint()
-    threshold=threshold/2.0
-    [sum_reward, average_loss] = machine_learning_functions.update_theta_SGD_TD(threshold,nn_model,loss_fn, optimizer, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
+    prediction_x_previous = nn_model(x)
+    prediction_x_changing_previous = nn_model(x_changing)
+    
+    [sum_reward, average_loss] = machine_learning_functions.sarsa_n(nn_model,loss_fn, optimizer, scheduler, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
     print("TOTAL REWARD")
     print(sum_reward)
     print("ave loss")
     print(average_loss)
-    #breakpoint()
+    
+    prediction_x = nn_model(x)
+    prediction_x_changing = nn_model(x_changing)
+    
+    total_prediction_diff = sum(abs(prediction_x - prediction_x_previous))
+    total_prediction_changing_diff = sum(abs(prediction_x_changing - prediction_x_changing_previous))
+    print("TOTALPREDICTION")
+    print(total_prediction_diff)
+    print(total_prediction_changing_diff)
+    print(optimizer.state_dict)
+    episodic_prediction[update] = total_prediction_diff
+    episodic_prediction_changing[update] = total_prediction_changing_diff
+    
     #print(list(nn_model.parameters()))
     #print("**********************************************************************")
     #print("EPISODE FINISHED")
@@ -647,25 +655,39 @@ for update in range(0,updates):
     #print(sum_reward)
     episodic_loss[update]=average_loss
     episodic_reward[update]=sum_reward
+    
+#%% SAVE MODEL
+    
+#torch.save(nn_model.state_dict(), cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'model.pth')
+#%% LOAD MODEL
+nn_model.load_state_dict(torch.load(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'model.pth'))
+
+#%%
+#np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_loss.txt', episodic_loss, fmt='%f')
+#np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_reward.txt', episodic_reward, fmt='%f')
+
+
+#%% Getting back the objects:
+el = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_loss.txt', dtype=float)
+er = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_reward.txt', dtype=float)
+
+
 #%%
 episodic_reward=episodic_reward[0:update]
+episodic_loss=episodic_loss[0:update]
+episodic_prediction = episodic_prediction[0:update]
+episodic_prediction_changing = episodic_prediction_changing[0:update]
+plt.plot(episodic_prediction_changing)
+plt.plot(episodic_prediction)
+#%%
+plt.plot(episodic_loss)
+plt.xlabel("epochs")
+plt.ylabel("<L>")
+#%%
 plt.plot(episodic_reward)
-    #%%
-#idea: lop to low -> not smart enough, lop to high->biased
 
-#n_back_step=10, gamma=0.8, alpha=0.001
-#array([0.        , 0.        , 0.        , 0.        , 0.        ,
-#       0.        , 0.        , 0.        , 0.12009567, 0.15201277,
-#       0.        , 0.        , 0.00613981, 0.        , 0.        ,
-#       0.47443781, 0.24620234, 0.40420298, 0.        , 0.19655331,
-#       0.        ])
-#%%    
-all_theta_values=all_theta_values[:,0:update]
-#%%plot theta over time
-fig = plt.figure(figsize=(10, 10))
-ax1 = fig.add_subplot(111)
-for j in range(0, all_theta_values.shape[0]):
-    ax1.plot(all_theta_values[j,:])
+plt.xlabel("epochs")
+plt.ylabel("<R>")
 #%%
 
 v_log_concs = -10 + 10*np.random.rand(nvar) #Vary between 1 M to 1.0e-10 M
@@ -731,11 +753,13 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
     epr = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
     delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
     reward=0
-
+    epr_vector_method_1[i]=epr
     if (i > 0):
             
         reward = machine_learning_functions.reward_value(v_log_counts, \
-                                                         v_log_counts_matrix1[:,i-1], KQ_f, KQ_r, E_regulation,\
+                                                         v_log_counts_matrix1[:,i-1],\
+                                                         KQ_f, KQ_r, E_regulation,\
+                                                         KQ_f, KQ_r, E_regulation,\
                                                          delta_S,delta_S_previous)
 
     total_reward+=reward
@@ -775,7 +799,7 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
     print("newE")
     print(newE)
     deltaS_value = delta_S[React_Choice]
-    epr_vector_method_1[i]=epr
+    
     flux_vector_method_1[i]=np.sum(rxn_flux)
         
     v_log_counts_matrix1[:,i] = v_log_counts
@@ -811,7 +835,7 @@ deltaS1=delta_S
 #%%
 #use policy_function
 import random
-attempts = 100
+attempts = 1000
 epr_vector_method_2=np.zeros(attempts)
 flux_vector_method_2=np.zeros(attempts)
 delta_S = np.ones(Keq_constant.size)
@@ -900,14 +924,15 @@ for test in range(0,1):
                                v_log_counts, f_log_counts, desired_conc, S_mat, A, 
                                rxn_flux, KQ_f, False, has_been_up_regulated,\
                                delta_S)
+        deltaS_value = delta_S[React_Choice]
+        
+        epr_vector_method_2[i]=epr
         if (oldE < newE):
             print("*****************************************************************************")
             #breakpoint()
         #print(newE)
                  
-        deltaS_value = delta_S[React_Choice]
-        
-        epr_vector_method_2[i]=epr
+
         
         ds = np.sum(delta_S[delta_S>0])
         ds_total_2 += ds
