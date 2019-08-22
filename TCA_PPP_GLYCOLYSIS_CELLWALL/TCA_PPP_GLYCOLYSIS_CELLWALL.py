@@ -1388,17 +1388,17 @@ json_model_file.close()
 #%%
 import json
 flux_dictionary = dict(zip(S_active.index, rxn_flux_2))
-with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\regulated_flux_data.json', 'w') as f:
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\tca_ppp_glycolysis_cellwall_regulated_flux_data.json', 'w') as f:
     json.dump(flux_dictionary, f)
         
 kq_dictionary = dict(zip(S_active.index, -RT*np.log(KQ_f_final2)))
-with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\regulated_kq_data.json', 'w') as f:
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\tca_ppp_glycolysis_cellwall_regulated_kq_data.json', 'w') as f:
     json.dump(kq_dictionary, f)
     
 alpha_dictionary = dict(zip(S_active.index, E_reg2))
-with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\regulated_activities_data.json', 'w') as f:
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\tca_ppp_glycolysis_cellwall_regulated_activities_data.json', 'w') as f:
     json.dump(alpha_dictionary, f)
     
 kq_alpha_dictionary=[kq_dictionary,alpha_dictionary]
-with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\kq_alpha_data.json', 'w') as f:
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\tca_ppp_glycolysis_cellwall_kq_alpha_data.json', 'w') as f:
     json.dump(kq_alpha_dictionary, f)

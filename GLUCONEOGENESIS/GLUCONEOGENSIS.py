@@ -1222,15 +1222,20 @@ if (1):
 json_model_file.close()
 
 #%%
+
 import json
-flux_dictionary = dict(zip(S_active.index, rxn_flux_1))
-with open(cwd+'\\GLUCONEOGENESIS\\map_regulated_flux.json', 'w') as f:
+flux_dictionary = dict(zip(S_active.index, rxn_flux_2))
+with open(cwd+'\\GLUCONEOGENESIS\\gluconeogenesis_regulated_flux_data.json', 'w') as f:
     json.dump(flux_dictionary, f)
-    
-kq_dictionary = dict(zip(S_active.index, -R*T*np.log(KQ_f_final2)))
-with open(cwd+'\\GLUCONEOGENESIS\\map_regulated_kq.json', 'w') as f:
+        
+kq_dictionary = dict(zip(S_active.index, -RT*np.log(KQ_f_final2)))
+with open(cwd+'\\GLUCONEOGENESIS\\gluconeogenesis_regulated_kq_data.json', 'w') as f:
     json.dump(kq_dictionary, f)
     
 alpha_dictionary = dict(zip(S_active.index, E_reg2))
-with open(cwd+'\\GLUCONEOGENESIS\\map_regulated_activities.json', 'w') as f:
+with open(cwd+'\\GLUCONEOGENESIS\\gluconeogenesis_regulated_activities_data.json', 'w') as f:
     json.dump(alpha_dictionary, f)
+    
+kq_alpha_dictionary=[kq_dictionary,alpha_dictionary]
+with open(cwd+'\\GLUCONEOGENESIS\\gluconeogenesis_kq_alpha_data.json', 'w') as f:
+    json.dump(kq_alpha_dictionary, f)
