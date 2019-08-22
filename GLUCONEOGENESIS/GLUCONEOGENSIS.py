@@ -468,15 +468,6 @@ reaction_choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, de
 display(newE)
 display(reaction_choice)
 
-    
-#%% Learn theta_linear
-
-#GLYCOLYSIS_TCA_GOGAT gamma=0.75, m=1, lop=10, epsilon greedy
-theta_linear = np.array([ 0.65071853,  0.39740525,  2.07639527,  0.39709477,  0.12606229,
-       -0.37766263,  0.39673707, -0.37495336, -0.3761415 ,  0.90798741,
-        0.17654277])
-
-#%%
  #%%
  
 import machine_learning_functions
@@ -507,7 +498,7 @@ machine_learning_functions.length_of_path = length_of_path
 
 #%%
 import torch
-N, D_in, H, D_out = 1, Keq_constant.size,  2*Keq_constant.size, 1
+N, D_in, H, D_out = 1, Keq_constant.size,  10*Keq_constant.size, 1
 
 # Create random Tensors to hold inputs and outputs
 x_in = torch.zeros(N, D_in)
@@ -531,10 +522,10 @@ alpha = 1e-1
 print(list(nn_model.parameters()))
 #optimizer = torch.optim.Adam(nn_model.parameters(), lr=alpha)
 
-optimizer = torch.optim.SGD(nn_model.parameters(), lr=1e-4, momentum=0.9)
+optimizer = torch.optim.SGD(nn_model.parameters(), lr=1e-3, momentum=0.9)
 
 #optimizer = torch.optim.LBFGS(nn_model.parameters(), lr=alpha, max_iter=10,tolerance_change=1e-300)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=0, verbose=True, min_lr=1e-8)
 
 #%% SGD UPDATE TEST
 theta_linear=[]
@@ -570,6 +561,8 @@ for update in range(0,updates):
     prediction_x_changing_previous = nn_model(x_changing)
     
     [sum_reward, average_loss] = machine_learning_functions.sarsa_n(nn_model,loss_fn, optimizer, scheduler, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
+    
+    scheduler.step(average_loss)
     print("TOTAL REWARD")
     print(sum_reward)
     print("ave loss")
@@ -595,10 +588,16 @@ for update in range(0,updates):
     episodic_loss[update]=average_loss
     episodic_reward[update]=sum_reward
 #%% SAVE MODEL
-    
+episodic_reward=episodic_reward[0:update]
+episodic_loss=episodic_loss[0:update]
+episodic_prediction = episodic_prediction[0:update]
+episodic_prediction_changing = episodic_prediction_changing[0:update]
+plt.plot(episodic_prediction_changing)
+plt.plot(episodic_prediction)
+#%%
 #torch.save(nn_model.state_dict(), cwd+'\\GLUCONEOGENESIS\\'+'model.pth')
 #%% LOAD MODEL
-nn_model.load_state_dict(torch.load(cwd+'\\GLUCONEOGENESIS\\'+'model.pth'))
+nn_model.load_state_dict(torch.load(cwd+'\\GLUCONEOGENESIS\\'+'model.pth'),strict=False)
 
 #%%
 #np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_loss.txt', episodic_loss, fmt='%f')
@@ -606,15 +605,9 @@ nn_model.load_state_dict(torch.load(cwd+'\\GLUCONEOGENESIS\\'+'model.pth'))
 
 
 #%% Getting back the objects:
-el = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_loss.txt', dtype=float)
-er = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_reward.txt', dtype=float)
-#%%
-episodic_reward=episodic_reward[0:update]
-episodic_loss=episodic_loss[0:update]
-episodic_prediction = episodic_prediction[0:update]
-episodic_prediction_changing = episodic_prediction_changing[0:update]
-plt.plot(episodic_prediction_changing)
-plt.plot(episodic_prediction)
+episodic_loss = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_loss.txt', dtype=float)
+episodic_reward = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_reward.txt', dtype=float)
+
 #%%
 plt.plot(episodic_loss)
 plt.xlabel("epochs")
@@ -757,7 +750,7 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
     i += 1
     delta_S_previous = delta_S.copy()
         
-        
+KQ_f_final1 = KQ_f
 reward_vec_1=reward_vec_1[0:i+1]
 v_log_counts_matrix1 = v_log_counts_matrix1[:,0:i+1]
 final_choices1=final_choices1[0:i+1]
@@ -897,6 +890,7 @@ for test in range(0,1):
     activity_matrix[:,test] = E_regulation
     
 
+KQ_f_final2 = KQ_f
 reward_vec_2=reward_vec_2[0:i]
 v_log_counts_matrix2 = v_log_counts_matrix2[:,0:i]
 final_choices2=final_choices2[0:i]
@@ -1142,12 +1136,101 @@ reverse_rate_constants = forward_rate_constants/Keq_constant
 display(forward_rate_constants)
 
 
-# In[ ]:
+#%% Make dictionary with metabolites indices and BiGG metabolite abbreviates so Escher software can read the json correctly
 
+metabolites = pd.Series(['BETA-D-GLUCOSE-6-PHOSPHATE:CYTOSOL',
+       'D-GLYCERALDEHYDE-3-PHOSPHATE:CYTOSOL', 'OXALOACETATE:CYTOSOL',
+       'PHOSPHOENOLPYRUVATE:CYTOSOL', '2-PHOSPHO-D-GLYCERATE:CYTOSOL',
+       '3-PHOSPHO-D-GLYCERATE:CYTOSOL',
+       '3-PHOSPHO-D-GLYCEROYL_PHOSPHATE:CYTOSOL', 'PYRUVATE:CYTOSOL',
+       'GLYCERONE_PHOSPHATE:CYTOSOL', 'D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL',
+       'D-FRUCTOSE_6-PHOSPHATE:CYTOSOL', 'NAD+:CYTOSOL', 'H2O:CYTOSOL',
+       'ADP:CYTOSOL', 'ATP:CYTOSOL', 'ORTHOPHOSPHATE:CYTOSOL',
+       'BETA-D-GLUCOSE:CYTOSOL', 'CO2:CYTOSOL', '(S)-MALATE:CYTOSOL',
+       'NADH:CYTOSOL'])
 
+    
+bigg = pd.Series(['M01389_c',
+                  'g3p_c_c','oaa_c',
+                  'pep_c','2pg_c',
+                  '3pg_c',
+                  '13dpg_c','pyr_c',
+                  'dhap_c','fdp_c',
+                  'f6p_c','nad_c','h2o_c',
+                  'adp_c','atp_c','pi_c',
+                  'glc__D_c','co2_c','mal__L_c',
+                  'nadh_c'])
 
+#{key: value for (key, value) in iterable}
+metabolite_bigg = dict(zip(metabolites, bigg))
 
+with open(cwd+'\\GLUCONEOGENESIS\\metabolite_bigg.pickle', 'wb') as handle:
+    pickle.dump(metabolite_bigg, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+#%%
 
+with open(cwd+'\\GLUCONEOGENESIS\\metabolite_bigg.pickle', 'rb') as handle:
+    metabolite_to_bigg = pickle.load(handle)
+json_model_file = open(cwd+'/GLUCONEOGENESIS/gluconeogenesis_all_reactions.json', 'w')
 
-# ## ODE Solvers: Python interface using libroadrunner to Sundials/CVODE
+if (1):
+    print('{\n\"metabolites\":[',file=json_model_file)
+    num_metab = len(S_active.columns)
+    i = 1
+    for m_idx in (S_active.columns):
+        print('{\n\"id\":\"%s\"' % (metabolite_to_bigg[m_idx]),file=json_model_file)
+        if (i < num_metab):
+            print('},',file=json_model_file)
+        else:
+            print('}',file=json_model_file)
+        i=i+1
+    print('],\n',file=json_model_file)
+    num_rxns = len(reactions.index)
+    i = 1
+    print('\"reactions\":[',file=json_model_file)
+    for idx in reactions.index:
+        print('{\n\"id\":\"%s\",' % (idx),file=json_model_file)
+        print('\"metabolites\":{',file=json_model_file)
+        rxn_metabs = {}
+        for m_idx in (S_active.columns):
+            if(S_active.loc[idx,m_idx] != 0):
+                
+                rxn_metabs[metabolite_to_bigg[m_idx]] = S_active.loc[idx,m_idx]
+                #rxn_metabs[](metabolite_to_bigg[m_idx])
+        key_list =[*rxn_metabs]
+        nkeyz = len(key_list)
+        for ii in key_list[:-1]:
+            print('\"%s\":%d,'% (ii,rxn_metabs[ii]),file=json_model_file)
+        print('\"%s\": %d'% (key_list[-1],rxn_metabs[key_list[-1]]),file=json_model_file)
+        print('}',file=json_model_file)
+        if (i < num_rxns):
+            print('},',file=json_model_file)
+        else:
+            print('}',file=json_model_file)
+        i=i+1
+    print('],',file=json_model_file)
+    print('\"genes\":[',file=json_model_file)
+    print('],',file=json_model_file)
+    print('\"id\":\"iMM904_BC\",',file=json_model_file)
+
+    print('\"compartments\":{',file=json_model_file)
+    print('\"c\":\"cytosol\",',file=json_model_file)
+    print('\"e\":\"extracellular space\",',file=json_model_file)
+    print('\"m\":\"mitochondria\"',file=json_model_file)
+    print('},',file=json_model_file)
+    print('\"version\":\"1\"\n}',file=json_model_file)
+json_model_file.close()
+
+#%%
+import json
+flux_dictionary = dict(zip(S_active.index, rxn_flux_1))
+with open(cwd+'\\GLUCONEOGENESIS\\map_regulated_flux.json', 'w') as f:
+    json.dump(flux_dictionary, f)
+    
+kq_dictionary = dict(zip(S_active.index, -R*T*np.log(KQ_f_final2)))
+with open(cwd+'\\GLUCONEOGENESIS\\map_regulated_kq.json', 'w') as f:
+    json.dump(kq_dictionary, f)
+    
+alpha_dictionary = dict(zip(S_active.index, E_reg2))
+with open(cwd+'\\GLUCONEOGENESIS\\map_regulated_activities.json', 'w') as f:
+    json.dump(alpha_dictionary, f)

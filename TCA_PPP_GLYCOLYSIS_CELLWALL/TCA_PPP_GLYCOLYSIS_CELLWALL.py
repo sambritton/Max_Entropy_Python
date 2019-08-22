@@ -630,7 +630,7 @@ episodic_loss = np.zeros(updates)
 episodic_reward = np.zeros(updates)
 episodic_prediction = np.zeros(updates)
 episodic_prediction_changing = np.zeros(updates)
-epsilon_greedy = 0.025
+epsilon_greedy = 0.0
 
 n_back_step = 10 #these steps use rewards. Total steps before n use state values
 
@@ -679,22 +679,6 @@ for update in range(0,updates):
     #print(sum_reward)
     episodic_loss[update]=average_loss
     episodic_reward[update]=sum_reward
-#%% SAVE MODEL
-    
-torch.save(nn_model.state_dict(), cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'model.pth')
-#%% LOAD MODEL
-nn_model.load_state_dict(torch.load(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'model.pth'))
-
-#%%
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss.txt', episodic_loss, fmt='%f')
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_reward.txt', episodic_reward, fmt='%f')
-
-
-#%% Getting back the objects:
-el = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss.txt', dtype=float)
-er = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_reward.txt', dtype=float)
-
-
 #%%
 episodic_reward=episodic_reward[0:update]
 episodic_loss=episodic_loss[0:update]
@@ -702,10 +686,30 @@ episodic_prediction = episodic_prediction[0:update]
 episodic_prediction_changing = episodic_prediction_changing[0:update]
 plt.plot(episodic_prediction_changing)
 plt.plot(episodic_prediction)
+#%% SAVE MODEL
+    
+#torch.save(nn_model.state_dict(), cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'model.pth')
+#%% LOAD MODEL
+nn_model.load_state_dict(torch.load(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'model.pth'))
+
+#%%
+#np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss.txt', episodic_loss, fmt='%f')
+#np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_reward.txt', episodic_reward, fmt='%f')
+
+
+#%% Getting back the objects:
+episodic_loss = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss.txt', dtype=float)
+episodic_reward = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_reward.txt', dtype=float)
+
 #%%
 plt.plot(episodic_loss)
 plt.xlabel("epochs")
 plt.ylabel("<L>")
+#%%
+plt.plot(episodic_reward)
+
+plt.xlabel("epochs")
+plt.ylabel("<R>")
 #%%
 
 v_log_concs = -10 + 10*np.random.rand(nvar) #Vary between 1 M to 1.0e-10 M
@@ -769,6 +773,7 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
     KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
     
     epr = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
+    
     delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
     reward=0
     epr_vector_method_1[i]=epr
@@ -781,7 +786,8 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
                                                          delta_S,delta_S_previous)
 
     total_reward+=reward
-            
+    if (reward==-5):
+        breakpoint()
     reward_vec_1.append(reward)
     delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts);
     
@@ -812,10 +818,7 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
                            delta_S)
         
             
-    print("rct_choice")
-    print(React_Choice)
-    print("newE")
-    print(newE)
+
     deltaS_value = delta_S[React_Choice]
     
     flux_vector_method_1[i]=np.sum(rxn_flux)
@@ -827,15 +830,15 @@ while( (i < attempts) and (np.max(delta_S) > 0) ):
 
 
     E_regulation[React_Choice] = newE
-    ds = np.sum(delta_S[delta_S>0])
-    ds_total_1_vec.append(ds)
+    ds = np.sum(delta_S[delta_S>0.0])
+    ds_metab = np.sum(delta_S_metab[delta_S_metab>0.0])
+    ds_total_1_vec.append(ds_metab)
         
-    ds_total_1 += ds
+    ds_total_1 += ds_metab
     print("entropy_production_rate")
     print(epr)
         
     epr_old=epr
-    print(delta_S)
     i += 1
     delta_S_previous = delta_S.copy()
         
@@ -847,7 +850,7 @@ flux_vector_method_1=flux_vector_method_1[0:i+1]
 opt_concs1 = v_log_counts
 E_reg1 = E_regulation
 rxn_flux_1 = rxn_flux
-deltaS1=delta_S
+deltaS1=delta_S_metab
 #
 #%%
 #use policy_function
@@ -960,24 +963,30 @@ for test in range(0,1):
             reward_vec_2.append(reward)
             E_regulation[React_Choice] = newE
         flux_vector_method_2[i]=np.sum(rxn_flux)
-        v_log_counts_matrix2[:,i] = v_log_counts
-        #print("entropy_production_rate")
-        #print("v_log_counts")
-        #print(v_log_counts)
-        print(epr)
-        #print(np.max(rxn_flux))
-        print("ds>0")
-        print(np.sum(delta_S[delta_S>0]))
-        #if (React_Choice==0):
-        #print(delta_S_metab)
             
-        #breakpoint()
+        v_log_counts_matrix2[:,i] = v_log_counts
+            
+        #print ("sum_flux")
+        #print(np.sum(rxn_flux))
+    
+    
+        E_regulation[React_Choice] = newE
+        ds = np.sum(delta_S[delta_S>0.0])
+        ds_metab = np.sum(delta_S_metab[delta_S_metab>0.0])
+        ds_total_2_vec.append(ds_metab)
+            
+        ds_total_2 += ds_metab
+        print("entropy_production_rate")
+        print(epr)
+            
+        epr_old=epr
+        i += 1
         delta_S_previous = delta_S.copy()
         
         i = i+1
     activity_matrix[:,test] = E_regulation
     
-
+KQ_f_final2 = KQ_f
 v_log_counts_matrix2 = v_log_counts_matrix2[:,0:i]
 final_choices2=final_choices2[0:i]
 epr_vector_method_2=epr_vector_method_2[0:i]
@@ -1245,10 +1254,151 @@ reverse_rate_constants = forward_rate_constants/Keq_constant
 display(forward_rate_constants)
 
 
-# In[ ]:
+#%% Make dictionary with metabolites indices and BiGG metabolite abbreviates so Escher software can read the json correctly
+metabolites = pd.Series(['OXALOACETATE:MITOCHONDRIA', 'ISOCITRATE:MITOCHONDRIA',
+       'OXALOACETATE:CYTOSOL', 'CITRATE:CYTOSOL', '(S)-MALATE:CYTOSOL',
+       'PHOSPHOENOLPYRUVATE:CYTOSOL', 'D-FRUCTOSE_6-PHOSPHATE:CYTOSOL',
+       'GLYCERONE_PHOSPHATE:CYTOSOL', 'D-GLYCERALDEHYDE-3-PHOSPHATE:CYTOSOL',
+       'CITRATE:MITOCHONDRIA', '2-OXOGLUTARATE:MITOCHONDRIA',
+       'D-GLUCOSE-1-PHOSPHATE:CYTOSOL', 'SUCCINYL-COA:MITOCHONDRIA',
+       'SEDOHEPTULOSE_7-PHOSPHATE:CYTOSOL', 'OXYGEN:MITOCHONDRIA',
+       'FUMARATE:MITOCHONDRIA', '(S)-MALATE:MITOCHONDRIA',
+       'ALPHA-D-GLUCOSE:CYTOSOL', '3-PHOSPHO-D-GLYCERATE:CYTOSOL',
+       '3-PHOSPHO-D-GLYCEROYL_PHOSPHATE:CYTOSOL', 'UDP-D-GLUCOSE:CYTOSOL',
+       'SUCCINATE:MITOCHONDRIA', 'ALPHA-D-GLUCOSE-6-PHOSPHATE:CYTOSOL',
+       'D-XYLULOSE-5-PHOSPHATE:CYTOSOL', 'UDP-N-ACETYL-D-GLUCOSAMINE:CYTOSOL',
+       'PYRUVATE:CYTOSOL', '2-PHOSPHO-D-GLYCERATE:CYTOSOL',
+       'ACETYL-COA:MITOCHONDRIA', 'PYRUVATE:MITOCHONDRIA',
+       'D-GLUCONO-1,5-LACTONE_6-PHOSPHATE:CYTOSOL',
+       
+       '6-PHOSPHO-D-GLUCONATE:CYTOSOL', 'D-RIBULOSE-5-PHOSPHATE:CYTOSOL',
+       'BETA-D-GLUCOSE-6-PHOSPHATE:CYTOSOL', 'D-RIBOSE-5-PHOSPHATE:CYTOSOL',
+       'SEDOHEPTULOSE_1,7-BISPHOSPHATE:CYTOSOL',
+       'D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL',
+       'D-GLUCOSAMINE-6-PHOSPHATE:CYTOSOL', 'ACETYL-COA:CYTOSOL',
+       'N-ACETYL-D-GLUCOSAMINE-6-PHOSPHATE:CYTOSOL',
+       'D-ERYTHROSE-4-PHOSPHATE:CYTOSOL',
+       'N-ACETYL-D-GLUCOSAMINE-1-PHOSPHATE:CYTOSOL', 'L-GLUTAMINE:CYTOSOL',
+       'COA:CYTOSOL', 'ADP:CYTOSOL', 'ADP:MITOCHONDRIA',
+       
+       'ORTHOPHOSPHATE:MITOCHONDRIA', 'ATP:CYTOSOL', 'NADP+:CYTOSOL',
+       'NADH:CYTOSOL', 'ATP:MITOCHONDRIA', 'NAD+:CYTOSOL', 'CO2:CYTOSOL',
+       'NADPH:CYTOSOL', 'CO2:MITOCHONDRIA', '1,3-BETA-D-GLUCAN:CYTOSOL',
+       'UTP:CYTOSOL', 'DIPHOSPHATE:CYTOSOL', 'N-ACETYL-D-GLUCOSAMINE:CYTOSOL',
+       'CHITOBIOSE:CYTOSOL', 'UDP:CYTOSOL', 'BETA-D-GLUCOSE:CYTOSOL',
+       'NAD+:MITOCHONDRIA', 'H2O:CYTOSOL', 'CELLOBIOSE:CYTOSOL',
+       'COA:MITOCHONDRIA', 'H2O:MITOCHONDRIA', 'NADH:MITOCHONDRIA',
+       'ORTHOPHOSPHATE:CYTOSOL', 'L-GLUTAMATE:CYTOSOL'])
+    
+bigg = pd.Series(['oaa_m','icit_m',
+                  'oaa_c','cit_c','mal__L_c',
+                  'pep_c','f6p_c',
+                  'dhap_c','g3p_c',
+                  'cit_m','akg_m',
+                  'g1p_c','succoa_m',
+                  's7p_c','o2_m',
+                  'fum_m','mal__L_m',
+                  'glc__aD_c','3pg_c',
+                  '13dpg_c','udpg_c',
+                  'succ_m','g6p_A_c',
+                  'xu5p__D_c','uacgam_c',
+                  'pyr_c','2pg_c',
+                  'accoa_m','pyr_m',                  
+                  '6pgl_c',
+                  
+                  '6pgc_c','ru5p__D_c',
+                  'M01389_c','ru5p__D_c',
+                  's17bp_c',
+                  'fdp_c',
+                  'gam6p_c','accoa_c',
+                  'acgam6p_c',
+                  'e4p_c',
+                  'acgam1p_c','gln__L_c',
+                  'coa_c', 'adp_c','adp_m',
+                  
+                  'pi_c','atp_c', 'nadp_c',
+                  'nadh_c','atp_m','nad_c','co2_c',
+                  'nadph_c','co2_m','13glucan_c',
+                  'utp_c','ppi_c','acgam_c',
+                  'HC00822_c','udp_c','glc__D_c',
+                  'nad_m','h2o_c','cellb_c',
+                  'coa_m','h2o_m','nadh_m',
+                  'pi_c','glu__L_c'])
 
+#{key: value for (key, value) in iterable}
+metabolite_bigg = dict(zip(metabolites, bigg))
 
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\metabolite_bigg.pickle', 'wb') as handle:
+    pickle.dump(metabolite_bigg, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+#%%
 
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\metabolite_bigg.pickle', 'rb') as handle:
+    metabolite_to_bigg = pickle.load(handle)
+json_model_file = open(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/tca_cellwall_all_reactions.json', 'w')
 
-# ## ODE Solvers: Python interface using libroadrunner to Sundials/CVODE
+if (1):
+    print('{\n\"metabolites\":[',file=json_model_file)
+    num_metab = len(S_active.columns)
+    i = 1
+    for m_idx in (S_active.columns):
+        print('{\n\"id\":\"%s\"' % (metabolite_to_bigg[m_idx]),file=json_model_file)
+        if (i < num_metab):
+            print('},',file=json_model_file)
+        else:
+            print('}',file=json_model_file)
+        i=i+1
+    print('],\n',file=json_model_file)
+    num_rxns = len(reactions.index)
+    i = 1
+    print('\"reactions\":[',file=json_model_file)
+    for idx in reactions.index:
+        print('{\n\"id\":\"%s\",' % (idx),file=json_model_file)
+        print('\"metabolites\":{',file=json_model_file)
+        rxn_metabs = {}
+        for m_idx in (S_active.columns):
+            if(S_active.loc[idx,m_idx] != 0):
+                
+                rxn_metabs[metabolite_to_bigg[m_idx]] = S_active.loc[idx,m_idx]
+                #rxn_metabs[](metabolite_to_bigg[m_idx])
+        key_list =[*rxn_metabs]
+        nkeyz = len(key_list)
+        for ii in key_list[:-1]:
+            print('\"%s\":%d,'% (ii,rxn_metabs[ii]),file=json_model_file)
+        print('\"%s\": %d'% (key_list[-1],rxn_metabs[key_list[-1]]),file=json_model_file)
+        print('}',file=json_model_file)
+        if (i < num_rxns):
+            print('},',file=json_model_file)
+        else:
+            print('}',file=json_model_file)
+        i=i+1
+    print('],',file=json_model_file)
+    print('\"genes\":[',file=json_model_file)
+    print('],',file=json_model_file)
+    print('\"id\":\"iMM904_BC\",',file=json_model_file)
+
+    print('\"compartments\":{',file=json_model_file)
+    print('\"c\":\"cytosol\",',file=json_model_file)
+    print('\"e\":\"extracellular space\",',file=json_model_file)
+    print('\"m\":\"mitochondria\"',file=json_model_file)
+    print('},',file=json_model_file)
+    print('\"version\":\"1\"\n}',file=json_model_file)
+json_model_file.close()
+
+#%%
+import json
+flux_dictionary = dict(zip(S_active.index, rxn_flux_2))
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\regulated_flux_data.json', 'w') as f:
+    json.dump(flux_dictionary, f)
+        
+kq_dictionary = dict(zip(S_active.index, -RT*np.log(KQ_f_final2)))
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\regulated_kq_data.json', 'w') as f:
+    json.dump(kq_dictionary, f)
+    
+alpha_dictionary = dict(zip(S_active.index, E_reg2))
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\regulated_activities_data.json', 'w') as f:
+    json.dump(alpha_dictionary, f)
+    
+kq_alpha_dictionary=[kq_dictionary,alpha_dictionary]
+with open(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\kq_alpha_data.json', 'w') as f:
+    json.dump(kq_alpha_dictionary, f)

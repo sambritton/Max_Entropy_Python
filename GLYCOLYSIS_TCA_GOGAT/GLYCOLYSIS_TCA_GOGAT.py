@@ -668,8 +668,8 @@ nn_model.load_state_dict(torch.load(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'model.pth'))
 
 
 #%% Getting back the objects:
-el = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_loss.txt', dtype=float)
-er = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_reward.txt', dtype=float)
+episodic_loss = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_loss.txt', dtype=float)
+episodic_reward = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_reward.txt', dtype=float)
 
 
 #%%
@@ -698,7 +698,7 @@ E_regulation = np.ones(Keq_constant.size)
 down_regulate = True
 nvar = len(v_log_counts)
 
-ipolicy=7 #USE 1 or 4
+ipolicy=4 #USE 1 or 4
 
 rxn_reset = 0 * np.ones(Keq_constant.size)
 rxn_use_abs = 0 * np.ones(Keq_constant.size)

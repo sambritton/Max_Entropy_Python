@@ -634,18 +634,18 @@ for update in range(0,updates):
     episodic_reward[update]=sum_reward
 #%% SAVE MODEL
     
-torch.save(nn_model.state_dict(), cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'model.pth')
+#torch.save(nn_model.state_dict(), cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'model.pth')
 #%% LOAD MODEL
 nn_model.load_state_dict(torch.load(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'model.pth'))
 
 #%%
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'episodic_loss.txt', episodic_loss, fmt='%f')
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'episodic_reward.txt', episodic_reward, fmt='%f')
+#np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'episodic_loss.txt', episodic_loss, fmt='%f')
+#np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'episodic_reward.txt', episodic_reward, fmt='%f')
 
 
 #%% Getting back the objects:
-el = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'episodic_loss.txt', dtype=float)
-er = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'episodic_reward.txt', dtype=float)
+episodic_loss = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'episodic_loss.txt', dtype=float)
+episodic_reward = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'episodic_reward.txt', dtype=float)
 
 
 #%%
@@ -674,7 +674,7 @@ E_regulation = np.ones(Keq_constant.size)
 down_regulate = True
 nvar = len(v_log_counts)
 
-ipolicy=7 #USE 1 or 4
+ipolicy=4 #USE 1 or 4
 
 rxn_reset = 0 * np.ones(Keq_constant.size)
 rxn_use_abs = 0 * np.ones(Keq_constant.size)
