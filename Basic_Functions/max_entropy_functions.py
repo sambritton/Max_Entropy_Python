@@ -16,24 +16,7 @@ def safe_ln(x):
     return np.log(x)
 
 def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
-# Matlab code:
-#active = find(~all(S==0,2));
-#kq_ge1_idx = find(KQ(active) >= 1)
-#kq_le1_idx = find(KQ(active) < 1)
-#kq_inv_ge1_idx = find(KQ_inverse(active) >= 1)
-#kq_inv_le1_idx = find(KQ_inverse(active) < 1)
-#
-#KQ_reg = E_Regulation(active).*KQ(active);
-#KQ_inverse_reg = E_Regulation(active).*KQ_inverse(active);
-#sumOdds = sum(KQ_reg) + sum(KQ_inverse_reg);
-#
-#entropy_production_rate = sum(KQ_reg(kq_ge1_idx).*log(KQ(kq_ge1_idx)))/sumOdds ...
-#                         -sum(KQ_reg(kq_le1_idx).*log(KQ(kq_le1_idx)))/sumOdds ...
-#                         -sum(KQ_inverse_reg(kq_inv_le1_idx).*log(KQ_inverse(kq_inv_le1_idx)))/sumOdds...
-#                         +sum(KQ_inverse_reg(kq_inv_ge1_idx).*log(KQ_inverse(kq_inv_ge1_idx)))/sumOdds;
 
-#NOTE Sign Switched, so we maximize (-epr)
-    #breakpoint()
     KQ_f_reg = E_Regulation * KQ_f
     KQ_r_reg = E_Regulation * KQ_r
     sumOdds = np.sum(KQ_f_reg) + np.sum(KQ_r_reg)
@@ -42,7 +25,7 @@ def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
     kq_le1_idx = np.where(KQ_f < 1)
     kq_inv_ge1_idx = np.where(KQ_r > 1)
     kq_inv_le1_idx = np.where(KQ_r <= 1)
-    #epr = +np.sum(KQ_f_reg * safe_ln(KQ_f_reg))/sumOdds + np.sum(KQ_r_reg * safe_ln(KQ_r_reg))/sumOdds
+    
     epr = +np.sum(KQ_f_reg[kq_ge1_idx] * safe_ln(KQ_f[kq_ge1_idx]))/sumOdds \
           -np.sum(KQ_f_reg[kq_le1_idx] * safe_ln(KQ_f[kq_le1_idx]))/sumOdds \
           -np.sum(KQ_r_reg[kq_inv_le1_idx] * safe_ln(KQ_r[kq_inv_le1_idx]))/sumOdds \
@@ -50,7 +33,7 @@ def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
     return epr
 
 def derivatives(log_vcounts,log_fcounts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, E_Regulation):
-    
+
     nvar = log_vcounts.size
     log_metabolites = np.append(log_vcounts,log_fcounts) #log_counts
     KQ_f = odds(log_metabolites,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, 1); #internal conversion to counts
@@ -71,10 +54,7 @@ def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_conc
     delta_counts = counts+delta_increment_for_small_concs;
     log_delta = safe_ln(delta_counts);
     Q_inv = np.exp(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_delta)))
-    #if ((np.max(counts) > 10**50) or (np.max(Q_inv)>10**50)):
-        #print("in Odds")
-        #print((counts))
-        #print((Q_inv))
+
     KQ = np.multiply(Keq_constant,Q_inv);
 
     return(KQ)
@@ -201,18 +181,20 @@ def calc_deltaS(log_vcounts, log_fcounts, S_mat, KQ):
 # In[ ]:
 
 
-def calc_deltaS_metab(v_log_counts, *args):
-    varargin = args
-    nargin = len(varargin)
-    
-    #initialize
-    target_v_log_counts = np.ones(len(v_log_counts))
-    if (nargin < 1):
-        #target_v_log_counts = np.ones(len(v_log_counts)) * np.log(0.001*6.022140857e+23*1.0e-15);
-        
-        target_v_log_counts = np.ones(len(v_log_counts)) * np.log(6.022140900000000e+05);
-    else:
-        target_v_log_counts = varargin;
+def calc_deltaS_metab(v_log_counts, target_v_log_counts ):
+# =============================================================================
+#     varargin = args
+#     nargin = len(varargin)
+#     
+#     #initialize
+#     target_v_log_counts = np.ones(len(v_log_counts))
+#     if (nargin < 1):
+#         #target_v_log_counts = np.ones(len(v_log_counts)) * np.log(0.001*6.022140857e+23*1.0e-15);
+#         
+#         target_v_log_counts = np.ones(len(v_log_counts)) * np.log(6.022140900000000e+05);
+#     else:
+#         target_v_log_counts = varargin;
+# =============================================================================
     
     delta_S_metab = v_log_counts - target_v_log_counts
     
@@ -222,41 +204,30 @@ def calc_deltaS_metab(v_log_counts, *args):
 # In[ ]:
 
 
-def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, v_counts, has_been_up_regulated):
+def get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ, E_regulation, v_counts):
     
     #comma makes np.where return array instead of list of array
     reaction_choice=-1
     
-    down_regulate = True
     #take positive and negative indices in metabolite errors
-    S_index, = np.where(delta_S > -np.inf) 
+    S_index = [i for i,_ in enumerate(E_regulation)]
     sm_idx, = np.where(delta_S_metab > 0.0) #reactions that have bad values 
 
-    S_index_neg, = np.where(delta_S < 0.0) 
-    sm_idx_neg, = np.where(delta_S_metab < 0.0) #reactions that have bad values 
     
-    if ( (S_index.size!=0) and (sm_idx.size!=0 ) and (S_index_neg.size !=0) and (sm_idx_neg.size !=0) ):
+    if ((sm_idx.size!=0 )):
         
         row_index = sm_idx.tolist()
-        col_index = S_index.tolist()
+        col_index = S_index
         
     
-        row_index_neg = sm_idx_neg.tolist()
-        col_index_neg = S_index_neg.tolist()
-        #display((row_index )  )
-        #display(col_index)
         if (ipolicy == 1):
             temp = ccc[np.ix_(row_index, col_index) ]
             temp_id = (temp > 0) #ccc>0 means derivative is positive (dlog(conc)/dlog(activity)>0) 
         
-            temp_neg = ccc[np.ix_(row_index_neg, col_index_neg) ]
-            temp_id_neg = (temp_neg > 0)
+
             
             bob = temp_id * temp
             bobSum = np.sum(bob, axis = 0)
-                
-            bob_neg = temp_id_neg * temp_neg
-            bobSum_neg = np.sum(bob_neg, axis = 0)
                 
             temp_id_bob, = np.where(bobSum > 1.0e-20)
             S_index = S_index[temp_id_bob]
@@ -265,12 +236,6 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
             temp = ccc[np.ix_(row_index, col_index) ]
             temp2 = temp > 0
                 
-            temp_id_bob_neg, = np.where(bobSum_neg > 1.0e-10)
-            S_index_neg = S_index_neg[temp_id_bob_neg]
-            col_index_neg = S_index_neg.tolist()
-            temp_neg = ccc[np.ix_(row_index_neg, col_index_neg) ]
-            temp2_neg = temp_neg > 0
-            #display(temp2)
                 
             
             temp2_max_val = np.max(np.sum(temp2, axis=0)) #sum rows
@@ -278,15 +243,8 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
             max_indices = np.argwhere(temp2_sum == temp2_max_val )
             values = np.sum(temp[:,max_indices], axis=0)
             index_max_value = np.argmax(values)
-            
-            temp2_max_val_neg = np.max(np.sum(temp2_neg, axis=0)) #sum rows
-            temp2_sum_neg = np.sum(temp2_neg, axis=0)
-            max_indices_neg = np.argwhere(temp2_sum_neg == temp2_max_val_neg )
-            values_neg = np.sum(temp_neg[:,max_indices_neg], axis=0)
-            index_max_value_neg = np.argmax(values_neg)
                 
             reaction_choice = S_index[max_indices[index_max_value]]
-            reaction_choice_neg = S_index_neg[max_indices_neg[index_max_value_neg]]
             
             return reaction_choice
         
@@ -296,47 +254,17 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
             #print(delta_S)
                 
             temp = ccc[np.ix_(sm_idx,S_index)]#np.ix_ does outer product
-            temp_neg = ccc[np.ix_(sm_idx_neg ,S_index_neg)]#np.ix_ does outer product
-            #print("temp")
-            #print(temp)
                 
             temp2 = (temp > 0) #ccc>0 means derivative is positive (dlog(conc)/dlog(activity)>0) 
             #this means regulation (decrease in activity) will result in decrease in conc
             
-            
-            temp2_neg = (temp_neg > 0)
-            
-            #row represents rxn, col represents metabolite
             temp_x = (temp*temp2)#Do not use matmul, use element wise mult.
-            temp_x_neg = (temp_neg*temp2_neg)
-            #print("temp_x")
-            #print(temp_x)
-            
     
-            index3 = np.argmax(np.sum(temp_x, axis=0)) #sum along rows (i.e. metabolites)
+            #temp_x is just positive ccc where metabolites are over required amount.
+            #sum along rows (i.e. metabolites) to see which reaction is most sensitive
+            index3 = np.argmax(np.sum(temp_x, axis=0))
             reaction_choice = S_index[index3]
-            val = np.max(np.sum(temp_x, axis=0))
-            
-            index3_neg = np.argmax(np.sum(temp_x_neg, axis=0))
-            reaction_choice_neg = S_index_neg[index3_neg]
-            val_neg = 0#np.max(np.sum(temp_x_neg, axis=0))
-            #breakpoint()
-            #print("alternate choice")
-            #print(S_index[index3_neg])
-            #breakpoint()
-            #use index from larger value
-            if (abs(val) >= abs(val_neg)):
-                reaction_choice = reaction_choice
-                
-            if ((E_regulation[reaction_choice_neg] < 1.0) and 
-                (val_neg > val) and 
-                (has_been_up_regulated[reaction_choice_neg])>0 ):
-                
-                has_been_up_regulated[reaction_choice]-=1
-                #breakpoint()
-                down_regulate = False
-                reaction_choice=reaction_choice_neg
-            
+
             return reaction_choice
         if (ipolicy == 7):
         
@@ -344,48 +272,23 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
             #print(delta_S)
                 
             temp = ccc[np.ix_(sm_idx,S_index)]#np.ix_ does outer product
-            temp_neg = ccc[np.ix_(sm_idx_neg ,S_index_neg)]#np.ix_ does outer product
-            #print("temp")
-            #print(temp)
                 
             temp2 = (temp > 0) #ccc>0 means derivative is positive (dlog(conc)/dlog(activity)>0) 
             #this means regulation (decrease in activity) will result in decrease in conc
             
-            
-            temp2_neg = (temp_neg > 0)
-            
-            #row represents rxn, col represents metabolite
             temp_x = (temp*temp2)#Do not use matmul, use element wise mult.
-            temp_x_neg = (temp_neg*temp2_neg)
             
+            #rxn by metabolite matrix
             dx = np.multiply(v_counts[sm_idx].T,temp_x.T)
-            dx_neg = np.multiply(v_counts[sm_idx_neg].T,temp_x_neg.T)
-
+            
             #dx_neg = v_counts[sm_idx_neg].T*temp_x_neg
             DeltaAlpha = 0.001; # must be small enough such that the arguement
                                 # of the log below is > 0
             DeltaDeltaS = -np.log(1 - DeltaAlpha*np.divide(dx,v_counts[sm_idx]))
-            DeltaDeltaS_neg = -np.log(1 - DeltaAlpha*np.divide(dx_neg,v_counts[sm_idx_neg]))
             
             index3 = np.argmax(np.sum(DeltaDeltaS, axis=1)) #sum along rows (i.e. metabolites)
             reaction_choice = S_index[index3]
-            val = np.max(np.sum(DeltaDeltaS, axis=1))
             
-            index3_neg = np.argmax(np.sum(DeltaDeltaS_neg, axis=1))
-            reaction_choice_neg = S_index_neg[index3_neg]
-            val_neg = 0#np.max(np.sum(temp_x_neg, axis=0))
-            
-            if (abs(val) >= abs(val_neg)):
-                reaction_choice = reaction_choice
-                
-            if ((E_regulation[reaction_choice_neg] < 1.0) and 
-                (val_neg > val) and 
-                (has_been_up_regulated[reaction_choice_neg])>0 ):
-                
-                has_been_up_regulated[reaction_choice]-=1
-                #breakpoint()
-                down_regulate = False
-                reaction_choice=reaction_choice_neg
             
             return reaction_choice
     else:
@@ -397,23 +300,14 @@ def get_enzyme2regulate(ipolicy, delta_S, delta_S_metab, ccc, KQ, E_regulation, 
 
 #use delta_S as args input variable to use method1 (E=E/2) when delta_S_val is small
 def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts, 
-                    log_fcounts,desired_conc,S_mat, A, rxn_flux,KQ,
-                    use_abs_step, has_been_up_regulated,
+                    log_fcounts,complete_target_log_counts,S_mat, A, rxn_flux,KQ,
                     *args):
     
     varargin = args
     nargin = len(varargin)
-    method = 0
-    delta_S_val_method1=0
-    if (nargin == 1):
-        method = 1
-        deltaS=varargin[0].copy()
-        delta_S_val_method1 = deltaS[React_Choice]
-    if (nargin == len(E_vec)):
-        method = 1
-        deltaS=varargin.copy()
-        delta_S_val_method1 = deltaS[React_Choice]
-        
+    method = 1
+    delta_S_val_method1=0.0
+    
     #breakpoint()
     vcounts = np.exp(log_vcounts)
     fcounts = np.exp(log_fcounts)
@@ -448,9 +342,12 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
         for i in range(0,len(prod_indices)):
             prod_index = prod_indices[i]
             
-            dx_j = metabolite_counts[prod_indices[i] ] - desired_conc;#same as delta_S
+            dx_j = metabolite_counts[prod_indices[i] ] - complete_target_log_counts[i]
             x_j_eq = metabolite_counts[ prod_indices[i] ];
-    
+            
+            if (dx_j > delta_S_val_method1):
+                delta_S_val_method1=dx_j
+                
             TEMP=(S_T[0:len(vcounts),React_Choice])*(rxn_flux[React_Choice]) 
     
             TEMP2=np.matmul(-B[prod_index,:],  TEMP )
@@ -474,7 +371,7 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
         delta_E_Final = E_choices[idx]
         
         newE = E - (delta_E_Final)
-
+        
         tolerance = 1.0e-07
         if ((newE < 0) or (newE > 1.0)):
             #reset if out of bounds          
@@ -485,13 +382,9 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
         
         if (method == 1):
             if(delta_S_val_method1 > tolerance):
-                newE = E - E/20
-            elif (use_abs_step==True):
-                newE = E - abs(delta_E_Final)
-                if(newE < 0) or (newE > 1):                    
-                    newE = E - E/20
+                newE = E - E/5
             else:
-                newE = E - (delta_E_Final)         
+                newE = E - E/5#(delta_E_Final)         
                 if(newE < 0) or (newE > 1):
-                    newE = E - E/20
+                    newE = E - E/5
     return newE

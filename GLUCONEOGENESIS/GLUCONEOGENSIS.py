@@ -429,8 +429,6 @@ display("Reaction Flux")
 display(rxn_flux)
 
 # In[ ]:
-down_regulate = True
-has_been_up_regulated = 10*np.ones(Keq_constant.size)
 begin_log_metabolites = np.append(res_lsq1.x,f_log_counts)
 ##########################################
 ##########################################
@@ -453,10 +451,9 @@ desired_conc=6.022140900000000e+05
 React_Choice=6
 
 newE = max_entropy_functions.calc_reg_E_step(E_regulation,React_Choice, nvar, res_lsq1.x, f_log_counts, desired_conc, 
-                       S_mat, A, rxn_flux,KQ_f,True, has_been_up_regulated)
+                       S_mat, A, rxn_flux,KQ_f)
     
     
-delta_S = max_entropy_functions.calc_deltaS(res_lsq1.x, f_log_counts, S_mat, KQ_f)
 
 target_log_concs = np.ones(nvar) * 13.308368285158080
 delta_S_metab = max_entropy_functions.calc_deltaS_metab(res_lsq1.x);
@@ -469,35 +466,36 @@ display(newE)
 display(reaction_choice)
 
  #%%
- 
-import machine_learning_functions
+import torch
+device = torch.device("cpu")
+
+import machine_learning_functions as me
+
 
 gamma = 0.9
 num_samples = 10 #number of state samples theta_linear attempts to fit to in a single iteration
-length_of_path = 5 #length of path after 1 forced step
+
 epsilon_greedy = 0.00
 
 #set variables in ML program
-machine_learning_functions.Keq_constant = Keq_constant
-machine_learning_functions.f_log_counts = f_log_counts
+me.device=device
+me.v_log_counts_static = v_log_counts_stationary
+me.Keq_constant = Keq_constant
+me.f_log_counts = f_log_counts
 
-machine_learning_functions.P_mat = P_mat
-machine_learning_functions.R_back_mat = R_back_mat
-machine_learning_functions.S_mat = S_mat
-machine_learning_functions.delta_increment_for_small_concs = delta_increment_for_small_concs
-machine_learning_functions.desired_conc = desired_conc
-machine_learning_functions.nvar = nvar
-machine_learning_functions.mu0 = mu0
+me.P_mat = P_mat
+me.R_back_mat = R_back_mat
+me.S_mat = S_mat
+me.delta_increment_for_small_concs = delta_increment_for_small_concs
+me.desired_conc = desired_conc
+me.nvar = nvar
+me.mu0 = mu0
 
-machine_learning_functions.gamma = gamma
-machine_learning_functions.num_rxns = Keq_constant.size
-machine_learning_functions.num_samples = num_samples
-machine_learning_functions.length_of_path = length_of_path
+me.gamma = gamma
+me.num_rxns = Keq_constant.size
 
-    
 
 #%%
-import torch
 N, D_in, H, D_out = 1, Keq_constant.size,  10*Keq_constant.size, 1
 
 # Create random Tensors to hold inputs and outputs
@@ -505,43 +503,52 @@ x_in = torch.zeros(N, D_in)
 y_in = torch.zeros(N, D_out)
 
 # Create random Tensors to hold inputs and outputs
-x = 10*torch.rand(1000,1, D_in)
+x = 10*torch.rand(1000, D_in)
 
+
+#works good enough
+# =============================================================================
+# nn_model = torch.nn.Sequential(
+#         torch.nn.Linear(D_in, H),
+#         torch.nn.Tanh(),
+#         torch.nn.Linear(H,D_out)) 
+# =============================================================================
+
+#works best with 10*keq as hidden layer, and divisor=5 for E_reg
 nn_model = torch.nn.Sequential(
         torch.nn.Linear(D_in, H),
-        torch.nn.LeakyReLU(),
+        torch.nn.Tanh(),
         torch.nn.Linear(H,D_out))
-# =============================================================================
-# 
-# nn_model = torch.nn.Sequential(
-#         torch.nn.Linear(D_in, D_out))
-# =============================================================================
 
 loss_fn = torch.nn.MSELoss(reduction='sum')
-alpha = 1e-1
-print(list(nn_model.parameters()))
-#optimizer = torch.optim.Adam(nn_model.parameters(), lr=alpha)
 
 optimizer = torch.optim.SGD(nn_model.parameters(), lr=1e-3, momentum=0.9)
+#optimizer = torch.optim.LBFGS(nn_model.parameters(), lr=alpha, max_iter=20,tolerance_change=1e-6)
+#optimizer = torch.optim.Adam(nn_model.parameters(), lr=3e-4)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-8,cooldown=10,threshold=2e-4)
 
-#optimizer = torch.optim.LBFGS(nn_model.parameters(), lr=alpha, max_iter=10,tolerance_change=1e-300)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=0, verbose=True, min_lr=1e-8)
 
 #%% SGD UPDATE TEST
-theta_linear=[]
-updates = 25000 #attempted iterations to update theta_linear
+
+updates = 4000 #attempted iterations to update theta_linear
 v_log_counts = v_log_counts_stationary.copy()
 episodic_loss = np.zeros(updates)
+episodic_loss_max = np.zeros(updates)
+episodic_epr = np.zeros(updates)
 episodic_reward = np.zeros(updates)
 episodic_prediction = np.zeros(updates)
 episodic_prediction_changing = np.zeros(updates)
-epsilon_greedy = 0.0
+epsilon_greedy = 0.1
+
+final_states=np.zeros(Keq_constant.size)
+epr_per_state=np.zeros(1)
+
 
 n_back_step = 3 #these steps use rewards. Total steps before n use state values
 
 for update in range(0,updates):
     
-    x_changing = 10*torch.rand(1000,1, D_in)
+    x_changing = 10*torch.rand(1000, D_in)
 
     
     #generate state to use
@@ -556,28 +563,30 @@ for update in range(0,updates):
         print("RESET epsilon ANNEALING")
         print(epsilon_greedy)
 
-    
-    prediction_x_previous = nn_model(x)
     prediction_x_changing_previous = nn_model(x_changing)
+    #nn_model.train()
+    [sum_reward, average_loss,max_loss,final_epr,final_state, reached_terminal_state] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon_greedy)
     
-    [sum_reward, average_loss] = machine_learning_functions.sarsa_n(nn_model,loss_fn, optimizer, scheduler, alpha, n_back_step, theta_linear, v_log_counts, state_sample, epsilon_greedy)
+    if (reached_terminal_state):
+        final_states = np.vstack((final_states,final_state))
+        epr_per_state = np.append(epr_per_state,final_epr)
+        
+
     
-    scheduler.step(average_loss)
+    #nn_model.eval()
+    scheduler.step(max_loss)
     print("TOTAL REWARD")
     print(sum_reward)
     print("ave loss")
     print(average_loss)
-    
-    prediction_x = nn_model(x)
+    print("max_loss")
+    print(max_loss)
+    print(optimizer.state_dict)
     prediction_x_changing = nn_model(x_changing)
     
-    total_prediction_diff = sum(abs(prediction_x - prediction_x_previous))
     total_prediction_changing_diff = sum(abs(prediction_x_changing - prediction_x_changing_previous))
     print("TOTALPREDICTION")
-    print(total_prediction_diff)
     print(total_prediction_changing_diff)
-    print(optimizer.state_dict)
-    episodic_prediction[update] = total_prediction_diff
     episodic_prediction_changing[update] = total_prediction_changing_diff
     
     #print(list(nn_model.parameters()))
@@ -585,182 +594,262 @@ for update in range(0,updates):
     #print("EPISODE FINISHED")
     #print("sum")
     #print(sum_reward)
+    episodic_epr[update] = final_epr
+    
+    
     episodic_loss[update]=average_loss
+    
+    episodic_loss_max[update]=max_loss
     episodic_reward[update]=sum_reward
 #%% SAVE MODEL
+episodic_epr=episodic_epr[0:update]
 episodic_reward=episodic_reward[0:update]
 episodic_loss=episodic_loss[0:update]
+episodic_loss_max=episodic_loss_max[0:update]
 episodic_prediction = episodic_prediction[0:update]
 episodic_prediction_changing = episodic_prediction_changing[0:update]
-plt.plot(episodic_prediction_changing)
-plt.plot(episodic_prediction)
+plt.plot(episodic_loss)
 #%%
-#torch.save(nn_model.state_dict(), cwd+'\\GLUCONEOGENESIS\\'+'model.pth')
+activity_method2 = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'activities_method2.txt', dtype=float)
+epr_method2 = 2.525036894771465
+
+begin=1 #truncate episodic data
+figure_norm = 12 #convert to 17.1cm
+figure_len_factor=4/3
+
+figure_factor=17.1/8.3#ratio for sm journal
+
+Fontsize_Title=20
+Fontsize_Sub = 15
+Fontsize_Leg = 15
+
+fig = plt.figure(figsize=(figure_norm, figure_norm))
+ax1 = fig.add_subplot(211)
+ax2 = fig.add_subplot(212)
+
+[fs,indices]=np.unique(final_states[begin:,:], axis=0, return_index=True)
+epr_plot=epr_per_state[begin:]
+sns.boxplot(data=fs[:,:],palette=sns.light_palette((210, 90, 60), input="husl"),
+            ax=ax1)
+
+for i in range(0,Keq_constant.size):
+    sns.regplot(x=np.array([i]), y=np.array([activity_method2[i]]), scatter=True, fit_reg=False, marker='x',
+                ax=ax1,
+                color='r',
+                scatter_kws={"s": 100})
+
+
+sns.distplot(epr_plot[indices],rug=False, ax=ax2)
+sns.regplot(x=np.array([epr_method2]), y=np.array([1]), scatter=True, fit_reg=False, marker='x',
+                ax=ax2,
+                color='r',
+                scatter_kws={"s": 100})
+
+ax1.set_xlabel('Reactions',fontsize=Fontsize_Sub)
+ax2.set_xlabel('Entropy Production Rate, EPR',fontsize=Fontsize_Sub)
+ax1.set_ylabel('Enzyme Activity',fontsize=Fontsize_Sub)
+ax2.set_ylabel('P(EPR)',fontsize=Fontsize_Sub)
+
+#%%
+
+base=sum(delta_S_metab[delta_S_metab>0])
+plt.scatter(episodic_epr[episodic_reward>8],episodic_reward[episodic_reward>8])
+
+plt.xlabel("epr")
+plt.ylabel("reward")
+
+#%%
+#gamma9 -> gamma=0.9
+#n8 -> n_back_step=8
+#k5 -> E=E-E/5 was used 
+#lr5e6 -> begin lr=0.5*e-6
+torch.save(nn_model, cwd+'\\GLUCONEOGENESIS\\'+'complete_model_gamma9_n3_k=15_3.pth')
 #%% LOAD MODEL
-nn_model.load_state_dict(torch.load(cwd+'\\GLUCONEOGENESIS\\'+'model.pth'),strict=False)
+#nn_model = torch.load(cwd+'\\GLUCONEOGENESIS\\'+'complete_model_gamma9_n3_k=15.pth')
 
 #%%
-#np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_loss.txt', episodic_loss, fmt='%f')
-#np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_reward.txt', episodic_reward, fmt='%f')
+np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_loss_gamma9_n3_k15_3.txt', episodic_loss, fmt='%f')
+np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_loss_max_gamma9_n3_k15_3.txt', episodic_loss_max, fmt='%f')
+np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_reward_gamma9_n3_k15_3.txt', episodic_reward, fmt='%f')
 
+np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'final_states_gamma9_n3_k15_3.txt', final_states, fmt='%f')
+np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'epr_per_state_gamma9_n3_k15_3.txt', epr_per_state, fmt='%f')
 
 #%% Getting back the objects:
-episodic_loss = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_loss.txt', dtype=float)
-episodic_reward = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_reward.txt', dtype=float)
+#episodic_loss_loaded = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_loss_gamma9_n3_k15_3.txt', dtype=float)
+#episodic_loss_max_loaded = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_loss_max_gamma9_n3_k15_3.txt', dtype=float)
+#episodic_reward = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'episodic_reward_gamma9_n3_k15_3.txt', dtype=float)
+
+#final_states_loaded = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'final_states_gamma9_n3_k15_3.txt', dtype=float)
+#epr_per_state_loaded = np.loadtxt(cwd+'\\GLUCONEOGENESIS\\'+'epr_per_state_gamma9_n3_k15_3.txt', dtype=float)
 
 #%%
-plt.plot(episodic_loss)
+plt.plot(episodic_loss[0:200])
 plt.xlabel("epochs")
 plt.ylabel("<L>")
 #%%
-plt.plot(episodic_reward)
+plt.plot(episodic_reward[0:200])
 
 plt.xlabel("epochs")
 plt.ylabel("<R>")
 #%%
+epr_vector_method_1=np.zeros(1)
+delta_S_metab = np.ones(Keq_constant.size)
 
-v_log_concs = -10 + 10*np.random.rand(nvar) #Vary between 1 M to 1.0e-10 M
+E_regulation=np.ones(Keq_constant.size)
+epsilon = 0.0
+
+final_choices1=np.zeros(1)
 v_log_counts = np.log(v_concs*Concentration2Count)
+v_log_counts_matrix1 = v_log_counts.copy()
+final_KQ_f=np.zeros(Keq_constant.size)
+final_KQ_r=np.zeros(Keq_constant.size)
 
-E_regulation = np.ones(Keq_constant.size)
-
-down_regulate = True
-nvar = len(v_log_counts)
+reward_vec_1=np.zeros(1)
 
 ipolicy=7 #USE 1 or 4
 
-rxn_reset = 0 * np.ones(Keq_constant.size)
-rxn_use_abs = 0 * np.ones(Keq_constant.size)
-has_been_up_regulated = 1*np.zeros(Keq_constant.size)
+total_reward1=0
 
-React_Choice=0
-#E_regulation = np.ones(Keq_constant.size)
-attempts = 100000
-i = 0
-deltaS_value = 10
-delta_S = np.ones(Keq_constant.size)
-epr_old=10000
-flux_vector_method_1 = np.zeros(attempts)
-epr_vector_method_1=np.zeros(attempts)
-final_choices1=np.zeros(attempts)
-
-v_log_counts_matrix1 = np.zeros([v_log_counts.size, attempts])
-
-use_abs_step = True
-#somehow first iteration is off. 
-#prod_indices in E_step are wrong. It is including 0. 
-epsilon = 0.0
-
-variable_concs_begin = np.array(metabolites['Conc'].iloc[0:nvar].values, dtype=np.float64)
-#v_log_concs = -10 + 10*np.random.rand(nvar) #Vary between 1 M to 1.0e-10 M
-#v_concs = np.exp(v_log_concs)
-activity_matrix = np.ones([v_log_counts.size, 10])
-
-total_reward=0
-reward_vec_1= np.zeros(attempts)
-
-
-ds_total_1=0.0  
-ds_total_1_vec=[]
 v_log_counts = np.log(variable_concs_begin*Concentration2Count)
-while( (i < attempts) and (np.max(delta_S) > 0) ):
+i=0
+while( (i < 1000) and (np.max(delta_S_metab) > 0) ):
+    reward=0
     
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
-    #print("Finished optimizing")
-    #Reset variable concentrations after optimization
     v_log_counts = res_lsq.x
     log_metabolites = np.append(v_log_counts, f_log_counts)
         
     #make calculations to regulate
     rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
         
-        
     KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
     Keq_inverse = np.power(Keq_constant,-1)
     KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
     
     epr = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
-    delta_S = max_entropy_functions.calc_deltaS(v_log_counts,f_log_counts, S_mat, KQ_f)
-    reward=0
-    epr_vector_method_1[i]=epr
-    if (i > 0):
-            
-        reward = machine_learning_functions.reward_value(v_log_counts, \
-                                                         v_log_counts_matrix1[:,i-1],\
-                                                         KQ_f, KQ_r, E_regulation,\
-                                                         KQ_f, KQ_r, E_regulation,\
-                                                         delta_S,delta_S_previous)
 
-    total_reward+=reward
-            
-    reward_vec_1[i]=reward
-    delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts);
+    delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts, target_v_log_counts);
     
     [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, E_regulation)
     A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, E_regulation )
         
     [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
     
-    React_Choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S, delta_S_metab,
-                                        ccc, KQ_f, E_regulation,v_log_counts, has_been_up_regulated)
+    React_Choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S_metab,
+                                        ccc, KQ_f, E_regulation,v_log_counts)  
+    if (i == 0):
+        final_choices1[0]=React_Choice
+        epr_vector_method_1[0] = epr
+        reward_vec_1[0]=reward
+        v_log_counts_matrix1=v_log_counts.copy()
+    else:      
+        final_choices1 = np.append(final_choices1, React_Choice)
+        epr_vector_method_1 = np.append(epr_vector_method_1, epr)
+        reward_vec_1 = np.append(reward_vec_1, reward)        
+        v_log_counts_matrix1 = np.vstack((v_log_counts_matrix1,v_log_counts))
         
+    
+    if (i > 0):
+        reward = machine_learning_functions.reward_value(v_log_counts, \
+                                                         v_log_counts_matrix1[i-1,:],\
+                                                         KQ_f, KQ_r, E_regulation)
+     
+    
+    total_reward1+=reward
+    #print(delta_S_metab)
+    
+    #NOTE: We must break before further modification to E_regulation is applied, or we are off by one step. 
+    #The above value of 
     if (React_Choice == -1):
+        
         print("FINISHED OPTIMIZING")
         break
             
-    final_choices1[i]=React_Choice
         
-    rxn_use_abs[React_Choice]=True
-    desired_conc=6.022140900000000e+05
-        
-    oldE = E_regulation[React_Choice]
-    old_delta_S=delta_S
-        
-    use_abs_step = rxn_use_abs[React_Choice]
     newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, v_log_counts, 
-                           f_log_counts, desired_conc, S_mat, A, rxn_flux, KQ_f, use_abs_step, 
-                           has_been_up_regulated,
-                           delta_S)
+                           f_log_counts, target_v_log_counts, S_mat, A, rxn_flux, KQ_f,
+                           delta_S_metab)
         
-            
-    print("rct_choice")
-    print(React_Choice)
-    print("newE")
-    print(newE)
-    deltaS_value = delta_S[React_Choice]
     
-    flux_vector_method_1[i]=np.sum(rxn_flux)
-        
-    v_log_counts_matrix1[:,i] = v_log_counts
-        
-    #print ("sum_flux")
-    #print(np.sum(rxn_flux))
-
-
     E_regulation[React_Choice] = newE
-    ds = np.sum(delta_S[delta_S>0])
-    ds_total_1_vec.append(ds)
-        
-    ds_total_1 += ds
-    print("entropy_production_rate")
-    print(epr)
-        
-    epr_old=epr
-    print(delta_S)
+    
+
     i += 1
-    delta_S_previous = delta_S.copy()
         
-KQ_f_final1 = KQ_f
-reward_vec_1=reward_vec_1[0:i+1]
-v_log_counts_matrix1 = v_log_counts_matrix1[:,0:i+1]
-final_choices1=final_choices1[0:i+1]
-epr_vector_method_1=epr_vector_method_1[0:i+1]
-flux_vector_method_1=flux_vector_method_1[0:i+1]
+delta_S_metab1=delta_S_metab
 opt_concs1 = v_log_counts
 E_reg1 = E_regulation
 rxn_flux_1 = rxn_flux
-deltaS1=delta_S
+
+#np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'activities_ruleot_method2.txt', E_reg1, fmt='%f')
+#np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'activities_experiment_method2.txt', E_reg1, fmt='%f')
+
 #
+#%%
+#use policy_function
+epr_vector_method_2=np.zeros(1)
+delta_S_metab = np.ones(Keq_constant.size)
+
+E_regulation=np.ones(Keq_constant.size)
+epsilon = 0.0
+
+final_choices2=np.zeros(1)
+v_log_counts = np.log(v_concs*Concentration2Count)
+v_log_counts_matrix2 = v_log_counts.copy()
+final_KQ_f=np.zeros(Keq_constant.size)
+final_KQ_r=np.zeros(Keq_constant.size)
+
+
+ds_total_2=0.0
+ds_total_2_vec=[]
+total_reward2=0
+
+reward_vec_2=np.zeros(1)
+i=0
+while( (i < 1000) and (np.max(delta_S_metab) > 0) ):
+
+    [React_Choice,reward,\
+     KQ_f,KQ_r,\
+     v_log_counts,\
+     E_regulation,\
+     delta_S_metab] = machine_learning_functions.policy_function(nn_model, E_regulation, v_log_counts)
+    #print(delta_S_metab)
+    
+    
+    if (React_Choice==-1):
+        break
+             
+    epr = max_entropy_functions.entropy_production_rate(KQ_f, KQ_r, E_regulation)
+    rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
+
+    print("rct_choice")
+    print(React_Choice)
+        
+                 
+    total_reward2+=reward
+    if (i == 0):
+        final_choices2[0]=React_Choice
+        epr_vector_method_2[0] = epr
+        reward_vec_2[0]=reward
+        v_log_counts_matrix2=v_log_counts.copy()
+    else:      
+        final_choices2 = np.append(final_choices2, React_Choice)
+        epr_vector_method_2 = np.append(epr_vector_method_2, epr)
+        reward_vec_2 = np.append(reward_vec_2, reward)        
+        v_log_counts_matrix2 = np.vstack((v_log_counts_matrix2,v_log_counts))
+    
+    i = i+1
+    
+
+opt_concs2 = v_log_counts
+E_reg2 = E_regulation
+rxn_flux_2 = rxn_flux
+deltaS2=delta_S_metab
+
+#np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'activities_ruleot_NN.txt', E_reg1, fmt='%f')
+#np.savetxt(cwd+'\\GLUCONEOGENESIS\\'+'activities_experiment_NN.txt', E_reg1, fmt='%f')
+
 #%%
 #use policy_function
 import random
