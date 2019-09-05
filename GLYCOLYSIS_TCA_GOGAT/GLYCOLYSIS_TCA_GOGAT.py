@@ -461,7 +461,7 @@ fixed_concs = np.array(metabolites[conc_type].iloc[nvar:].values, dtype=np.float
 fixed_counts = fixed_concs*Concentration2Count
 f_log_counts = np.log(fixed_counts)
 
-complete_target_log_counts = np.log(Concentration2Count * metabolites[conc_type])
+complete_target_log_counts = np.log(Concentration2Count * metabolites[conc_type].values)
 target_v_log_counts = complete_target_log_counts[0:nvar]
 target_f_log_counts = complete_target_log_counts[nvar:]
 
@@ -592,30 +592,36 @@ nn_model = torch.nn.Sequential(
 # =============================================================================
 
 loss_fn = torch.nn.MSELoss(reduction='sum')
-
-optimizer = torch.optim.SGD(nn_model.parameters(), lr=0.5*1e-6, momentum=0.9)
+learning_rate=5e-6
+#optimizer = torch.optim.SGD(nn_model.parameters(), lr=learning_rate, momentum=0.9)
+optimizer = torch.optim.SGD(nn_model.parameters(), lr=learning_rate, momentum=0.9)
 
 #optimizer = torch.optim.Adam(nn_model.parameters(), lr=3e-4)
 
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-5)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-3)
+#scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-4)
 
 #%% SGD UPDATE TEST
 theta_linear=[]
 updates = 2500 #attempted iterations to update theta_linear
 v_log_counts = v_log_counts_stationary.copy()
-episodic_loss = np.zeros(updates)
-episodic_loss_max = np.zeros(updates)
-episodic_epr = np.zeros(updates)
-episodic_reward = np.zeros(updates)
-episodic_prediction = np.zeros(updates)
-episodic_prediction_changing = np.zeros(updates)
-epsilon_greedy = 0.05
+episodic_loss = []
+episodic_loss_max = []
+episodic_epr = []
+episodic_reward = []
+episodic_prediction = []
+episodic_prediction_changing = []
+
+episodic_nn_step = []
+episodic_random_step = []
+epsilon_greedy = 0.1
+epsilon_greedy_init = epsilon_greedy
 
 final_states=np.zeros(Keq_constant.size)
-epr_per_state=np.zeros(1)
+epr_per_state=[]
 
-n_back_step = 8 #these steps use rewards. Total steps before n use state values
-
+n_back_step = 2 #these steps use rewards. Total steps before n use state values
+threshold=20
 for update in range(0,updates):
     
     x_changing = 10*torch.rand(1000, D_in)
@@ -628,20 +634,24 @@ for update in range(0,updates):
         state_sample[sample] = np.random.uniform(1,1)
 
     #annealing test
-    if ((update %10 == 0) and (update != 0)):
+    if ((update %threshold == 0) and (update != 0)):
         epsilon_greedy=epsilon_greedy/2
         print("RESET epsilon ANNEALING")
         print(epsilon_greedy)
 
     prediction_x_changing_previous = nn_model(x_changing)
     #nn_model.train()
-    [sum_reward, average_loss,max_loss,final_epr,final_state, reached_terminal_state] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon_greedy)
+    [sum_reward, average_loss,max_loss,final_epr,final_state, reached_terminal_state,\
+     random_steps_taken,nn_steps_taken] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon_greedy)
     
+    print('random,nn steps')
+    print(random_steps_taken)
+    print(nn_steps_taken)
     if (reached_terminal_state):
         final_states = np.vstack((final_states,final_state))
-        epr_per_state = np.append(epr_per_state,final_epr)
+        epr_per_state.append(final_epr)
         
-    scheduler.step(max_loss)
+    scheduler.step(average_loss)
     print("TOTAL REWARD")
     print(sum_reward)
     print("ave loss")
@@ -650,39 +660,78 @@ for update in range(0,updates):
     print(max_loss)
     
     print(optimizer.state_dict)
+    print(scheduler.state_dict())
     prediction_x_changing = nn_model(x_changing)
     
     total_prediction_changing_diff = sum(abs(prediction_x_changing - prediction_x_changing_previous))
     print("TOTALPREDICTION")
     print(total_prediction_changing_diff)
-    episodic_prediction_changing[update] = total_prediction_changing_diff
     
     #print(list(nn_model.parameters()))
     #print("**********************************************************************")
     #print("EPISODE FINISHED")
     #print("sum")
     #print(sum_reward)
-    episodic_epr[update] = final_epr
+    episodic_epr.append(final_epr)
     
+    episodic_loss.append(average_loss)
     
-    episodic_loss[update]=average_loss
-    
-    episodic_loss_max[update]=max_loss
-    episodic_reward[update]=sum_reward
-#%% SAVE MODEL
-episodic_epr=episodic_epr[0:update]
-episodic_reward=episodic_reward[0:update]
-episodic_loss=episodic_loss[0:update]
-episodic_loss_max=episodic_loss_max[0:update]
-episodic_prediction = episodic_prediction[0:update]
-episodic_prediction_changing = episodic_prediction_changing[0:update]
-plt.plot(episodic_loss)
+    episodic_loss_max.append(max_loss)
+    episodic_reward.append(sum_reward)
+    episodic_nn_step.append(nn_steps_taken)
+    episodic_random_step.append(random_steps_taken)
+    np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\data\\'+'temp_episodic_loss_'+str(n_back_step) +\
+               '_'+str(learning_rate)+'_'+str(threshold)+'_sim2'+\
+               '.txt', episodic_loss, fmt='%f')
+    np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\data\\'+'temp_episodic_random_step'+str(n_back_step)+\
+               str(learning_rate)+'_'+str(threshold)+'_sim2'+\
+               '.txt', episodic_random_step, fmt='%f')
+    #save temporary copies to see
 
 #%%
-activity_method2 = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'activities_method2.txt', dtype=float)
-epr_method2=4.141253187991768
+#gamma9 -> gamma=0.9
+#n8 -> n_back_step=8
+#k5 -> E=E-E/5 was used 
+#lr5e6 -> begin lr=0.5*e-6
 
-begin=1 #truncate episodic data
+torch.save(nn_model, cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'complete_model_gly_tca_gog_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(0.1)+'_sim5'+'.txt'+'.pth')
+
+#%%
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'episodic_loss_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', episodic_loss, fmt='%f')
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'episodic_loss_max_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', episodic_loss_max, fmt='%f')
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'episodic_reward_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', episodic_reward, fmt='%f')
+
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'final_states_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', final_states, fmt='%f')
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'epr_per_state_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', epr_per_state, fmt='%f')
+
+
+
+
+#%%
+activity_method2 = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'activities_ruleot_method2.txt', dtype=float)
+epr_method2_ruleot=4.141253187991768
+
+
+begin=450 #truncate episodic data
+
+[fs,indices]=np.unique(final_states[begin:,:], axis=0, return_index=True)
+fs = final_states[begin:,:]
+
+fs_data=pd.DataFrame(columns=['Method','Activity','Reaction'])
+counter=0
+for i in range(0,len(Keq_constant)):
+    for j in range(0,fs[:,:].shape[0]):
+        
+        fs_data.loc[counter] = ['RL', fs[j,i], i]
+        counter+=1
+
+#%%
 figure_norm = 12 #convert to 17.1cm
 figure_len_factor=4/3
 
@@ -692,32 +741,45 @@ Fontsize_Title=20
 Fontsize_Sub = 15
 Fontsize_Leg = 15
 
-fig = plt.figure(figsize=(figure_norm, figure_norm))
-ax1 = fig.add_subplot(211)
-ax2 = fig.add_subplot(212)
+fig = plt.figure(figsize=(figure_norm, 0.5*figure_norm))
+ax1 = fig.add_subplot(111)
+#ax2 = fig.add_subplot(212)
 
-[fs,indices]=np.unique(final_states[begin:,:], axis=0, return_index=True)
+
 epr_plot=epr_per_state[begin:]
-sns.boxplot(data=fs[:,:],palette=sns.light_palette((210, 90, 60), input="husl"),
+sns.boxplot(x='Reaction',
+            y='Activity',
+            data=fs_data,
+            hue='Method',
+            palette=sns.light_palette((210, 90, 60), input="husl"),
             ax=ax1)
 
-for i in range(0,Keq_constant.size):
+#To make legend, plot first with label for legend
+sns.regplot(x=np.array([0]), y=np.array([activity_method2[2]]), scatter=True, fit_reg=False, marker='x',
+            ax=ax1,
+            label='CCC',
+            color='r',
+            scatter_kws={"s": 100})
+
+for i in range(1,Keq_constant.size):
     sns.regplot(x=np.array([i]), y=np.array([activity_method2[i]]), scatter=True, fit_reg=False, marker='x',
                 ax=ax1,
                 color='r',
                 scatter_kws={"s": 100})
 
 
-sns.distplot(epr_plot[indices],rug=False, ax=ax2)
-sns.regplot(x=np.array([epr_method2]), y=np.array([1]), scatter=True, fit_reg=False, marker='x',
-                ax=ax2,
-                color='r',
-                scatter_kws={"s": 100})
+#sns.distplot(epr_plot,rug=True, ax=ax2)
+#sns.regplot(x=np.array([epr_method2_ruleot]), y=np.array([1]), scatter=True, fit_reg=False, marker='x',
+#                ax=ax2,
+#                color='r',
+#               scatter_kws={"s": 100})
 
 ax1.set_xlabel('Reactions',fontsize=Fontsize_Sub)
-ax2.set_xlabel('Entropy Production Rate, EPR',fontsize=Fontsize_Sub)
+#ax2.set_xlabel('Entropy Production Rate, EPR',fontsize=Fontsize_Sub)
 ax1.set_ylabel('Enzyme Activity',fontsize=Fontsize_Sub)
-ax2.set_ylabel('P(EPR)',fontsize=Fontsize_Sub)
+#ax2.set_ylabel('P(EPR)',fontsize=Fontsize_Sub)
+
+ax1.legend(fontsize=Fontsize_Leg, loc='lower left')
 #%%
 base=sum(delta_S_metab[delta_S_metab>0])
 plt.scatter(episodic_epr[episodic_epr>1],episodic_reward[episodic_epr>1])
@@ -726,7 +788,7 @@ plt.plot(episodic_loss)
 plt.xlabel("epochs")
 plt.ylabel("<L>")
 #%%
-plt.plot(episodic_reward[150:200])
+plt.plot(episodic_reward[1:100])
 
 plt.xlabel("epochs")
 plt.ylabel("<R>")
@@ -736,24 +798,33 @@ plt.ylabel("<R>")
 #n8 -> n_back_step=8
 #k5 -> E=E-E/5 was used 
 #lr5e6 -> begin lr=0.5*e-6
-torch.save(nn_model, cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'complete_model_gly_tca_gog_gamma9_n8_k5_lr5e6_1.pth')
-#%% LOAD MODEL
-#nn_model = torch.load(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'complete_model_gly_tca_gog_gamma9_n3_k15_2.pth')
+
+torch.save(nn_model, cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'complete_model_gly_tca_gog_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(0.1)+'_sim5'+'.txt'+'.pth')
+
 #%%
-np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_loss_gamma9_n8_k5_lr5e6_2.txt', episodic_loss, fmt='%f')
-np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_loss_max_gamma9_n8_k5_lr5e6_2.txt', episodic_loss_max, fmt='%f')
-np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_reward_gamma9_n8_k5_lr5e6_2.txt', episodic_reward, fmt='%f')
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'episodic_loss_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', episodic_loss, fmt='%f')
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'episodic_loss_max_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', episodic_loss_max, fmt='%f')
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'episodic_reward_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', episodic_reward, fmt='%f')
 
-np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'final_states_gamma9_n8_k5_lr5e6_1.txt', final_states, fmt='%f')
-np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'epr_per_state_gamma9_n8_k5_lr5e6_1.txt', epr_per_state, fmt='%f')
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'final_states_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', final_states, fmt='%f')
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'epr_per_state_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim5'+'.txt', epr_per_state, fmt='%f')
 
+
+#%% LOAD MODEL
+#nn_model = torch.load(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'complete_model_gly_tca_gog_gamma9_n3_k15_2.pth')
 #%% Getting back the objects:
-#episodic_loss_loaded = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_loss_gamma9_n8_k15_3.txt', dtype=float)
-#episodic_loss_max_loaded = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_loss_max_gamma9_n8_k15_3.txt', dtype=float)
-#episodic_reward = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'episodic_reward_gamma9_n8_k15_3.txt', dtype=float)
+episodic_loss_loaded = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'episodic_loss_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
+episodic_loss_max_loaded = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'episodic_loss_max_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
+episodic_reward = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'episodic_reward_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
 
-#final_states_loaded = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'final_states_gamma9_n8_k15_3.txt', dtype=float)
-#epr_per_state_loaded = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'epr_per_state_gamma9_n8_k15_3.txt', dtype=float)
+final_states_loaded = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'final_states_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
+epr_per_state_loaded = np.loadtxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\models_final_data\\'+'epr_per_state_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
 
 
 #%%
@@ -911,7 +982,7 @@ E_reg2 = E_regulation
 rxn_flux_2 = rxn_flux
 deltaS2=delta_S_metab
 
-#np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'activities_ruleot_NN.txt', E_reg1, fmt='%f')
+np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'activities_ruleot_NN.txt', E_reg1, fmt='%f')
 #np.savetxt(cwd+'\\GLYCOLYSIS_TCA_GOGAT\\'+'activities_experiment_NN.txt', E_reg1, fmt='%f')
 
 #%% KQ
