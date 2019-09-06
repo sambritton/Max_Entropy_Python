@@ -503,7 +503,7 @@ def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
 
     for update in range(0,updates):
         
-        x_changing = 10*torch.rand(1000, D_in)
+        x_changing = 10*torch.rand(1000, D_in, device=device)
     
         
         #generate state to use
