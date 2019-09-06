@@ -56,12 +56,13 @@ Method = 'lm'
 
 #Physically this is trying to minimizing the free energy change in each reaction. 
 def state_value(nn_model, x):
-    x_true = torch.zeros(1,len(x))
-    for i in range(0,len(x)):
-        scaled_val = x[i]
-        x_true[0][i] = np.log(1.0 + np.exp(range_of_activity_scale)*scaled_val)
-        
-    val = nn_model(x_true)
+    
+    val = nn_model(torch.log(1.0 + torch.exp(range_of_activity_scale*x)))
+    
+    scale_to_one = np.log(range_of_activity_scale + (1**log_scale_activity))
+    x_scaled = (1.0 / scale_to_one) * torch.log(1.0 + (x**log_scale_activity))
+    val = nn_model( x_scaled )
+    
     return val
 
 #want to maximize the change in loss function for positive values. 
@@ -244,7 +245,7 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
                 
         if (tau >=0):
             #breakpoint()
-            estimate_value = torch.zeros(1)
+            estimate_value = torch.zeros(1, device=device)
 
             for i in range(tau + 1, min(tau + n_back_step, end_of_path)+1):    
                 estimate_value += (gamma**(i-tau-1)) * reward_vec[i]
