@@ -28,7 +28,7 @@ from scipy.optimize import least_squares
 import torch
 
 def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
-        gamma = 0.9,updates = 250, alternative_reward=False): 
+        gamma = 0.9,updates = 250, penalty_reward_scalar=-1.0,): 
     
     pd.set_option('display.max_columns', None,'display.max_rows', None)
     
@@ -437,11 +437,11 @@ def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
 
      #%%
     
-    device = torch.device("cpu")
-     
+    #device = torch.device("cpu")
     
-    
-    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print('Using device:', device)
+
     
     #set variables in ML program
     me.device=device
@@ -460,40 +460,19 @@ def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
     
     me.gamma = gamma
     me.num_rxns = Keq_constant.size
-    me.alternative_reward=False
+    me.penalty_reward_scalar=penalty_reward_scalar
     
     #%%
     N, D_in, H, D_out = 1, Keq_constant.size,  50*Keq_constant.size, 1
-    
+
     # Create random Tensors to hold inputs and outputs
-    x_in = torch.zeros(N, D_in)
-    y_in = torch.zeros(N, D_out)
-    
-    # Create random Tensors to hold inputs and outputs
-    x = 10*torch.rand(1000, D_in)
-    
+    x = torch.rand(1000, D_in, device=device)
+
     nn_model = torch.nn.Sequential(
             torch.nn.Linear(D_in, H),
             torch.nn.Tanh(),
-            torch.nn.Linear(H,D_out))
-    # =============================================================================
-    # 
-    # nn_model = torch.nn.Sequential(
-    #         torch.nn.Linear(D_in, 200),
-    #                 
-    #         torch.nn.ReLU(),
-    #         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=2, padding=0),
-    #         torch.nn.ReLU(),
-    #         torch.nn.MaxPool1d(2),
-    #         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=1, padding=0),
-    #         torch.nn.ReLU(),
-    #         torch.nn.MaxPool1d(2),
-    #         
-    #         torch.nn.Linear(23, D_out)
-    #         )
-    # 
-    # =============================================================================
-    
+            torch.nn.Linear(H,D_out)).to(device)
+
     loss_fn = torch.nn.MSELoss(reduction='sum')
     #learning_rate=5e-6
     #optimizer = torch.optim.SGD(nn_model.parameters(), lr=learning_rate, momentum=0.9)
@@ -581,17 +560,17 @@ def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
         episodic_random_step.append(random_steps_taken)
         np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+'temp_episodic_loss_'+str(n_back_step) +\
                    '_'+str(learning_rate)+'_'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+\
-                    '_altreward_' + str(me.alternative_reward) +
+                    '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +
                    '.txt', episodic_loss, fmt='%f')
 
         np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+'temp_epr_'+str(n_back_step) +\
                    '_'+str(learning_rate)+'_'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+\
-                    '_altreward_' + str(me.alternative_reward) +
+                    '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +
                    '.txt', episodic_epr, fmt='%f')
 
         np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+'temp_episodic_random_step_'+str(n_back_step)+\
                    '_'+str(learning_rate)+'_'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+\
-                    '_altreward_' + str(me.alternative_reward) +
+                    '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +
                    '.txt', episodic_random_step, fmt='%f')
         
         if (update > 200):
@@ -607,36 +586,38 @@ def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
     
     torch.save(nn_model, cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'complete_model_gly_tca_gog_gamma9_n'+str(n_back_step)+'_k5_'\
                +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_altreward_' + str(me.alternative_reward) +\
+                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
                 '.pth')
     
     #%%
     np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'episodic_loss_gamma9_n'+str(n_back_step)+'_k5_'\
                +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_altreward_' + str(me.alternative_reward) +\
+                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
                 '.txt', episodic_loss, fmt='%f')
     np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'episodic_loss_max_gamma9_n'+str(n_back_step)+'_k5_'\
                +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_altreward_' + str(me.alternative_reward) +\
+                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
                 '.txt', episodic_loss_max, fmt='%f')
     np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'episodic_reward_gamma9_n'+str(n_back_step)+'_k5_'\
                +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_altreward_' + str(me.alternative_reward) +\
+                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
                 '.txt', episodic_reward, fmt='%f')
     
     np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'final_states_gamma9_n'+str(n_back_step)+'_k5_'\
                +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_altreward_' + str(me.alternative_reward) +\
+                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
                 '.txt', final_states, fmt='%f')
 
     np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'epr_per_state_gamma9_n'+str(n_back_step)+'_k5_'\
                +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_altreward_'+str(me.alternative_reward) +'.txt', epr_per_state, fmt='%f')
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar) +'.txt', epr_per_state, fmt='%f')
 
 
 #run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
-#        gamma = 0.9,updates = 250,me.alternative_reward=False): 
+#        gamma = 0.9,updates = 250, penalty_reward_scalar=False): 
 
 updates=1000
-eps=0.9
-run(1,10,1e-7,0.75,50, eps, updates)
+gamma=0.9 
+penalty_reward_scalar=0.1 #
+epsilon_threshold=10
+run(1,5,1e-7,1.0,epsilon_threshold, gamma, updates,penalty_reward_scalar)
