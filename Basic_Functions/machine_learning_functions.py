@@ -32,7 +32,8 @@ mu0=[]
 gamma=[]
 num_rxns=[]
 
-penalty_reward = -0.0
+penalty_reward = -1.5
+penalty_reward_scalar=-1
 
 range_of_activity_scale = 1.0
 log_scale_activity = 0.4
@@ -66,47 +67,54 @@ def state_value(nn_model, x):
 #want to maximize the change in loss function for positive values. 
 #what i really want is to make this function continuous. 
 def reward_value(v_log_counts_future, v_log_counts_old,\
-                 KQ_f_new, KQ_r_new, E_Regulation_new, alternative_reward):
-    
-    val_old = max_entropy_functions.calc_deltaS_metab(v_log_counts_old, target_v_log_counts)
-    val_future = max_entropy_functions.calc_deltaS_metab(v_log_counts_future, target_v_log_counts)
-
-    e_val_old = np.exp(v_log_counts_old)-np.exp(target_v_log_counts)
-    e_val_old[e_val_old<0]=0
-    e_val_old=np.sum(e_val_old)
-    if (e_val_old > 0):
-        e_val_old=np.log(e_val_old)
-        
-    e_val_future = np.exp(v_log_counts_future)-np.exp(target_v_log_counts)
-    e_val_future[e_val_future<0]=0
-    e_val_future=sum(e_val_future)
-    if (e_val_future > 0):
-        e_val_future=np.log(e_val_future)
-
-
-    val_old[val_old<0.0] = 0
-    val_future[val_future<0] = 0
-    
+                 KQ_f_new, KQ_r_new, E_Regulation_new, E_Regulation_old):
     final_reward=0.0
-    reward_s = np.sum(val_old - val_future) #this is positive if val_future is less, so we need
+
+    #val_old = max_entropy_functions.calc_deltaS_metab(v_log_counts_old, target_v_log_counts)
+    #val_future = max_entropy_functions.calc_deltaS_metab(v_log_counts_future, target_v_log_counts)
+    
+    #https://www.xarg.org/2016/06/the-log-sum-exp-trick-in-machine-learning/
+    scale_old = np.max(v_log_counts_old - target_v_log_counts)
+    
+    e_val_old = np.exp(v_log_counts_old - target_v_log_counts-scale_old)
+    e_val_old = scale_old + np.log(np.sum(e_val_old))
+      
+    scale_future = np.max(v_log_counts_future - target_v_log_counts)
+    e_val_future = np.exp(v_log_counts_future - target_v_log_counts - scale_future)
+    e_val_future = scale_future  + np.log(np.sum(e_val_future))
+
+    reward_s = e_val_old - e_val_future
+    #val_old[val_old<0.0] = 0
+    #val_future[val_future<0] = 0
+    
+    #reward_s = np.sum(val_old - val_future) #this is positive if val_future is less, so we need
+    
+    #originally, does nothing, but turns to penalty when regulating a new reaction
+    psi = 1.0 
     
     #reward_s = e_val_old-e_val_future
+    num_regulated_new = np.sum(E_Regulation_new==1)
+    num_regulated_old = np.sum(E_Regulation_old==1)
+
+    if (num_regulated_new != num_regulated_old):
+        #then you regulated a new reaction:
+        psi = penalty_reward_scalar
 
     if ((reward_s <= 0.0)):
-        #final_reward = penalty_reward
-        final_reward = reward_s
+        final_reward = penalty_reward
+        #final_reward += reward_s
         
     if (reward_s > 0.0):
-        final_reward = reward_s
+        final_reward = psi * reward_s
         #if negative (-0.01) -> take fastest path
         #if positive (0.01) -> take slowest path
         
-    if ((val_future<=0.0).all()):
+    if ((scale_future<=0.0).all()):
         #The final reward is meant to maximize the EPR value. However, there was some residual error in ds_metab
         #that must be taken into account. We therefore add the last reward_s to the EPR value. 
         
         epr_future = max_entropy_functions.entropy_production_rate(KQ_f_new, KQ_r_new, E_Regulation_new)
-        final_reward = 1.0 * epr_future + reward_s 
+        final_reward = 1.0 * epr_future + psi*reward_s 
         
     return final_reward
 
@@ -176,45 +184,15 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
                     
             if (React_Choice==-1):
                 break
-            #newE_path = max_entropy_functions.calc_reg_E_step(states_matrix[:,t], React_Choice, nvar, 
-            #                   v_log_counts_matrix[:,t], f_log_counts, desired_conc, S_mat, A_path,
-            #                   rxn_flux_path, KQ_f_matrix[:,t],\
-            #                   delta_S_metab_matrix[:,t])
-                
 
-            #now generate the state based on newE_path
-            #states_matrix[:,t+1]=states_matrix[:,t].copy()
-            #states_matrix[:,t+1][React_Choice] = newE_path
-            
-            #re-optimize
-            #new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_matrix[:,t], method=Method,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,t+1]))
-            
-            #v_log_counts_matrix[:,t+1] = (new_res_lsq.x).copy()
-            #log_metabolites_path = np.append(v_log_counts_matrix[:,t+1], f_log_counts)
-        
             rxn_flux_path = max_entropy_functions.oddsDiff(v_log_counts_matrix[:,t+1], f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,t+1])
             
-            #KQ_f_matrix[:,t+1] = max_entropy_functions.odds(log_metabolites_path, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant).copy()
-            #KQ_r_matrix[:,t+1] = max_entropy_functions.odds(log_metabolites_path, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1).copy()
-                
-            #[RR_path, Jac_path] = max_entropy_functions.calc_Jac2(v_log_counts_matrix[:,t+1], f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f_matrix[:,t+1], KQ_r_matrix[:,t+1], states_matrix[:,t+1])
-            #A_path = max_entropy_functions.calc_A(v_log_counts_matrix[:,t+1], f_log_counts, S_mat, Jac_path, states_matrix[:,t+1] )
-        
+
             epr_path = max_entropy_functions.entropy_production_rate(KQ_f_matrix[:,t+1], KQ_r_matrix[:,t+1], states_matrix[:,t+1])
             
-            
-            #delta_S_metab_matrix[:,t+1] = max_entropy_functions.calc_deltaS_metab(v_log_counts_matrix[:,t+1]).copy()
-            
-            #[ccc_path, fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A_path, S_mat, rxn_flux_path, RR_path)
-            
-            #reward_vec[t+1] = reward_value(v_log_counts_matrix[:,t+1], v_log_counts_matrix[:,t],\
-            #                            KQ_f_matrix[:,t+1], KQ_r_matrix[:,t+1], states_matrix[:,t+1]).copy()
-            
+
             sum_reward_episode += reward_vec[t+1]
-            
-            #if (np.abs(policy_reward-reward_vec[t+1]) > 0.01):
-            #    breakpoint()
-            
+
             #last_state = states_matrix[:,t]
             current_state = states_matrix[:,t+1].copy()
             
@@ -422,10 +400,11 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         value_current_state=value_current_state.item()
     
         
-        current_reward = reward_value(new_v_log_counts, v_log_counts, 
-                                      KQ_f_matrix[:,act], KQ_r_matrix[:,act], trial_state_sample, alternative_reward)
+        current_reward = reward_value(new_v_log_counts, v_log_counts, \
+                                      KQ_f_matrix[:,act], KQ_r_matrix[:,act],\
+                                      trial_state_sample, state)
 
-        
+        #print(current_reward)
         #best action is defined by the current chosen state and value 
         #should it be the next state value after?
         action_value = current_reward + (gamma) * value_current_state #note, action is using old KQ values
@@ -438,12 +417,29 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         current_reward_vec[act] = current_reward #Should have smaller EPR
         #print(current_reward)
         #USE PENALTY REWARDS
-        #if (current_reward == penalty_reward):
-        #    rxn_choices.remove(act)
+        if (current_reward == penalty_reward):
+            rxn_choices.remove(act)
     
     #randomly choose one of the top choices if there is a tie. 
     #flatnonzero chooses a True value of the action_value_vec equal to it's max entry
+    if ( len(action_value_vec == action_value_vec.max()) ==0 ):
+        print(action_value_vec)
+        
     action_choice = np.random.choice(np.flatnonzero(action_value_vec == action_value_vec.max()))
+    
+    arr_choice = np.flatnonzero(action_value_vec == action_value_vec.max())
+    
+    arr_choice_reg = np.flatnonzero(state[arr_choice]<1)
+    if (arr_choice_reg.size>1):
+        print('using tie breaker')
+        print(arr_choice[arr_choice_reg])
+        action_choice = np.random.choice(arr_choice[arr_choice_reg])
+    
+
+    #print('current_reward_vec')
+    #print(current_reward_vec)
+    #print("action_choice")
+    #print(action_choice)
     #UPDATE
     # choose one you already regulated in case of a tie
 
@@ -471,6 +467,8 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
 #     breakpoint()
 # =============================================================================
     #rxn_choices.remove(action_choice)
+    #print("state_value_vec")
+    #print(state_value_vec)
     used_random_step=False
     unif_rand = np.random.uniform(0,1)
     if (unif_rand < epsilon_greedy):
