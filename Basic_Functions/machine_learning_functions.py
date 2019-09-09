@@ -405,7 +405,9 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
                                       KQ_f_matrix[:,act], KQ_r_matrix[:,act],\
                                       trial_state_sample, state)
 
-        #print(current_reward)
+        if (current_reward == penalty_reward):
+            rxn_choices.remove(act)
+            #print(current_reward)
         #best action is defined by the current chosen state and value 
         #should it be the next state value after?
         action_value = current_reward + (gamma) * value_current_state #note, action is using old KQ values
@@ -418,13 +420,13 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         current_reward_vec[act] = current_reward #Should have smaller EPR
         #print(current_reward)
         #USE PENALTY REWARDS
-        if (current_reward == penalty_reward):
-            rxn_choices.remove(act)
+
     
     #randomly choose one of the top choices if there is a tie. 
     #flatnonzero chooses a True value of the action_value_vec equal to it's max entry
-    if ( len(action_value_vec == action_value_vec.max()) ==0 ):
+    if ( len(np.flatnonzero(action_value_vec == action_value_vec.max())) ==0 ):
         print(action_value_vec)
+        print(action_value_vec.max())
         
     action_choice = np.random.choice(np.flatnonzero(action_value_vec == action_value_vec.max()))
     
@@ -472,7 +474,7 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     #print(state_value_vec)
     used_random_step=False
     unif_rand = np.random.uniform(0,1)
-    if (unif_rand < epsilon_greedy):
+    if ( (unif_rand < epsilon_greedy) and (len(rxn_choices) > 0)):
         #if (len(rxn_choices)>1):
         #    rxn_choices.remove(action_choice)
         #print("USING EPSILON GREEDY")

@@ -50,10 +50,10 @@ def derivatives(log_vcounts,log_fcounts,mu0,S_mat, R_back_mat, P_mat, delta_incr
 
 def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, direction = 1):
     
-    counts = np.exp(log_counts) #convert to counts
-    delta_counts = counts+delta_increment_for_small_concs;
-    log_delta = safe_ln(delta_counts);
-    Q_inv = np.exp(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_delta)))
+    #counts = np.exp(log_counts) #convert to counts
+    #delta_counts = counts+delta_increment_for_small_concs;
+    #log_delta = safe_ln(delta_counts);
+    Q_inv = np.exp(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))
 
     KQ = np.multiply(Keq_constant,Q_inv);
 
