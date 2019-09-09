@@ -22,7 +22,8 @@ import time
 from PIL import Image
 import matplotlib.image as mpimg
 from IPython.display import display
-
+from scipy.optimize import least_squares
+import torch
 import sys
 
 cwd = os.getcwd()
@@ -34,6 +35,7 @@ sys.path.insert(0, cwd+'\\Basic_Functions\\equilibrator-api-v0.1.8\\build\\lib')
 
 import max_entropy_functions
 import machine_learning_functions
+import machine_learning_functions as me
 
 
 pd.set_option('display.max_columns', None,'display.max_rows', None)
@@ -199,7 +201,6 @@ from equilibrator_api.reaction_matcher import ReactionMatcher
 reaction_matcher = ReactionMatcher()
 
 
-
 #%%
 if (0):
     eq_api = ComponentContribution(pH=7.0, ionic_strength=0.15) # loads data
@@ -211,7 +212,7 @@ if (0):
     dG0_prime, dG0_uncertainty = eq_api.dG0_prime(rxn)
     display(dG0_prime, dG0_uncertainty)
 
-if (1):
+if (0):
     eq_api=ComponentContribution(pH=7.0, ionic_strength=0.15) # loads data
     for idx in reactions.index:
        #print(idx, flush=True)
@@ -233,6 +234,51 @@ if (1):
        display(dG0_prime, dG0_uncertainty)
        reactions.loc[idx,deltag0] = dG0_prime
        reactions.loc[idx,deltag0_sigma] = dG0_uncertainty
+if (1):
+    reactions.loc['CSm',deltag0] = -35.1166
+    reactions.loc['ACONTm',deltag0] = 7.62949
+    reactions.loc['ICDHxm',deltag0] = -2.872
+    reactions.loc['AKGDam',deltag0] = -36.3549
+    reactions.loc['SUCOASm',deltag0] = 1.924481
+    reactions.loc['SUCD1m',deltag0] = 0
+    reactions.loc['FUMm',deltag0] = -3.44873
+    reactions.loc['MDHm',deltag0] = 29.9942
+    reactions.loc['GAPD',deltag0] = 6.68673
+    reactions.loc['PGK',deltag0] = -18.4733
+    reactions.loc['TPI',deltag0] = 5.48642
+    reactions.loc['FBA',deltag0] = 20.5096
+    reactions.loc['PYK',deltag0] = -27.5366
+    reactions.loc['PGM',deltag0] = 4.19953
+    reactions.loc['ENO',deltag0] = -4.08222
+    reactions.loc['HEX1',deltag0] = -17.0578
+    reactions.loc['PGI',deltag0] = 2.52401
+    reactions.loc['PFK',deltag0] = -15.4549
+    reactions.loc['PYRt2m',deltag0] = -RT*np.log(10)
+    reactions.loc['PDHm',deltag0] = -43.9219
+    reactions.loc['GOGAT',deltag0] = 48.8552
+    
+    reactions.loc['CSm',deltag0_sigma] = 0.930552
+    reactions.loc['ACONTm',deltag0_sigma] = 0.733847
+    reactions.loc['ICDHxm',deltag0_sigma] = 7.62095
+    reactions.loc['AKGDam',deltag0_sigma] = 7.97121
+    reactions.loc['SUCOASm',deltag0_sigma] = 1.48197
+    reactions.loc['SUCD1m',deltag0_sigma] = 2.31948
+    reactions.loc['FUMm',deltag0_sigma] = 0.607693
+    reactions.loc['MDHm',deltag0_sigma] = 0.422376
+    reactions.loc['GAPD',deltag0_sigma] = 0.895659
+    reactions.loc['PGK',deltag0_sigma] = 0.889982
+    reactions.loc['TPI',deltag0_sigma] = 0.753116
+    reactions.loc['FBA',deltag0_sigma] = 0.87227
+    reactions.loc['PYK',deltag0_sigma] = 0.939774
+    reactions.loc['PGM',deltag0_sigma] = 0.65542
+    reactions.loc['ENO',deltag0_sigma] = 0.734193
+    reactions.loc['HEX1',deltag0_sigma] = 0.715237
+    reactions.loc['PGI',deltag0_sigma] = 0.596775
+    reactions.loc['PFK',deltag0_sigma] = 0.886629
+    reactions.loc['PYRt2m',deltag0_sigma] = 0
+    reactions.loc['PDHm',deltag0_sigma] = 7.66459
+    reactions.loc['GOGAT',deltag0_sigma] = 2.0508
+
 if (0):
     eq_api = ComponentContribution(pH=7.0, ionic_strength=0.15)  # loads data
     rxn_list = []
@@ -1231,3 +1277,14 @@ display(forward_rate_constants_ML)
 plt.plot(forward_rate_constants_ML/forward_rate_constants_CCC)
 plt.plot(reverse_rate_constants_ML/reverse_rate_constants_CCC)
 # ## ODE Solvers: Python interface using libroadrunner to Sundials/CVODE
+#%%
+
+
+
+reactions = pd.Series(['CSm', 'ACONTm', 'ICDHxm', 'AKGDam', 'SUCOASm', 'SUCD1m', 'FUMm',
+       'MDHm', 'GAPD', 'PGK', 'TPI', 'FBA', 'PYK', 'PGM', 'ENO', 'HEX1', 'PGI',
+       'PFK', 'PYRt2m', 'PDHm', 'GOGAT'])
+    
+bigg_reaction = pd.Series(['CSm','ACONTm', 'ICDHxm', 'AKGDam', 'SUCOASm', 'SUCD1m', 'FUMm',
+       'MDHm', 'GAPD', 'PGK', 'TPI', 'FBA', 'PYK', 'PGM', 'ENO', 'HEX1', 'PGI',
+       'PFK', 'PYRt2m', 'PDHm', 'GOGAT'])

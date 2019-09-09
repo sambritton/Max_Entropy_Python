@@ -28,10 +28,20 @@ from scipy.optimize import least_squares
 import torch
 
 def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
-        gamma = 0.9,updates = 250, penalty_reward_scalar=-1.0,): 
+        gamma = 0.9,updates = 250, penalty_reward_scalar=0.0,): 
     
     pd.set_option('display.max_columns', None,'display.max_rows', None)
     
+    print("sim")
+    print(sim_number)
+    print("n_back_step")
+    print(n_back_step)
+    print("learning_rate")
+    print(learning_rate)
+    print("epsilon")
+    print(epsilon)
+    print("eps_threshold")
+    print(eps_threshold)
     
     T = 298.15
     R = 8.314e-03
@@ -480,7 +490,7 @@ def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
     
     #optimizer = torch.optim.Adam(nn_model.parameters(), lr=3e-4)
     
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-5)
     #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-4)
     
     #%% SGD UPDATE TEST
@@ -574,7 +584,7 @@ def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
                    '.txt', episodic_random_step, fmt='%f')
         
         if (update > 200):
-            if (max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.05):
+            if (max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025):
                 break
         #save temporary copies to see
     
@@ -614,10 +624,14 @@ def run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
 
 
 #run(sim_number, n_back_step,learning_rate, epsilon, eps_threshold,\
-#        gamma = 0.9,updates = 250, penalty_reward_scalar=False): 
+#        gamma = 0.9,updates = 250, penalty_reward_scalar): 
 
 updates=1000
 gamma=0.9 
-penalty_reward_scalar=0.1 #
-epsilon_threshold=10
-run(1,5,1e-7,1.0,epsilon_threshold, gamma, updates,penalty_reward_scalar)
+penalty_reward_scalar=0.9 #
+epsilon_threshold=50
+learning_rate=1e-6
+eps=1.0
+n=10
+run(2, 18, 1e-8, 0.5, 25, 0.9, updates, 0.0)
+#_4_1e-08_25
