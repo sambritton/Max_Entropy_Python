@@ -478,7 +478,7 @@ fixed_concs = np.array(metabolites[conc_type].iloc[nvar:].values, dtype=np.float
 fixed_counts = fixed_concs*Concentration2Count
 f_log_counts = np.log(fixed_counts)
 
-complete_target_log_counts = np.log(Concentration2Count * metabolites[conc_type])
+complete_target_log_counts = np.log(Concentration2Count * metabolites[conc_type].values)
 target_v_log_counts = complete_target_log_counts[0:nvar]
 target_f_log_counts = complete_target_log_counts[nvar:]
 
@@ -585,46 +585,59 @@ y_in = torch.zeros(N, D_out)
 # Create random Tensors to hold inputs and outputs
 x = 10*torch.rand(1000, D_in)
 
-
-#works good enough
-# =============================================================================
-# nn_model = torch.nn.Sequential(
-#         torch.nn.Linear(D_in, H),
-#         torch.nn.Tanh(),
-#         torch.nn.Linear(H,D_out)) 
-# =============================================================================
-
-#works best with 10*keq as hidden layer, and divisor=5 for E_reg
 nn_model = torch.nn.Sequential(
         torch.nn.Linear(D_in, H),
         torch.nn.Tanh(),
         torch.nn.Linear(H,D_out))
+# =============================================================================
+# 
+# nn_model = torch.nn.Sequential(
+#         torch.nn.Linear(D_in, 200),
+#                 
+#         torch.nn.ReLU(),
+#         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=2, padding=0),
+#         torch.nn.ReLU(),
+#         torch.nn.MaxPool1d(2),
+#         torch.nn.Conv1d(in_channels=1, out_channels=1,kernel_size=3,stride=1, padding=0),
+#         torch.nn.ReLU(),
+#         torch.nn.MaxPool1d(2),
+#         
+#         torch.nn.Linear(23, D_out)
+#         )
+# 
+# =============================================================================
 
 loss_fn = torch.nn.MSELoss(reduction='sum')
+learning_rate=5e-6
+#optimizer = torch.optim.SGD(nn_model.parameters(), lr=learning_rate, momentum=0.9)
+optimizer = torch.optim.SGD(nn_model.parameters(), lr=learning_rate, momentum=0.9)
 
-optimizer = torch.optim.SGD(nn_model.parameters(), lr=0.5*1e-5, momentum=0.9)
-#optimizer = torch.optim.LBFGS(nn_model.parameters(), lr=alpha, max_iter=20,tolerance_change=1e-6)
 #optimizer = torch.optim.Adam(nn_model.parameters(), lr=3e-4)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-4)
 
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-3)
+#scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-4)
 
 #%% SGD UPDATE TEST
-
-updates = 4000 #attempted iterations to update theta_linear
+theta_linear=[]
+updates = 2500 #attempted iterations to update theta_linear
 v_log_counts = v_log_counts_stationary.copy()
-episodic_loss = np.zeros(updates)
-episodic_loss_max = np.zeros(updates)
-episodic_epr = np.zeros(updates)
-episodic_reward = np.zeros(updates)
-episodic_prediction = np.zeros(updates)
-episodic_prediction_changing = np.zeros(updates)
-epsilon_greedy = 0.05
+episodic_loss = []
+episodic_loss_max = []
+episodic_epr = []
+episodic_reward = []
+episodic_prediction = []
+episodic_prediction_changing = []
+
+episodic_nn_step = []
+episodic_random_step = []
+epsilon_greedy = 0.1
+epsilon_greedy_init = epsilon_greedy
 
 final_states=np.zeros(Keq_constant.size)
-epr_per_state=np.zeros(1)
+epr_per_state=[]
 
-n_back_step = 8 #these steps use rewards. Total steps before n use state values
-
+n_back_step = 2 #these steps use rewards. Total steps before n use state values
+threshold=20
 for update in range(0,updates):
     
     x_changing = 10*torch.rand(1000, D_in)
@@ -637,83 +650,74 @@ for update in range(0,updates):
         state_sample[sample] = np.random.uniform(1,1)
 
     #annealing test
-    if ((update %10 == 0) and (update != 0)):
+    if ((update %threshold == 0) and (update != 0)):
         epsilon_greedy=epsilon_greedy/2
         print("RESET epsilon ANNEALING")
         print(epsilon_greedy)
 
     prediction_x_changing_previous = nn_model(x_changing)
     #nn_model.train()
-    [sum_reward, average_loss,max_loss,final_epr,final_state, reached_terminal_state] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon_greedy)
+    [sum_reward, average_loss,max_loss,final_epr,final_state, reached_terminal_state,\
+     random_steps_taken,nn_steps_taken] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon_greedy)
     
+    print('random,nn steps')
+    print(random_steps_taken)
+    print(nn_steps_taken)
     if (reached_terminal_state):
         final_states = np.vstack((final_states,final_state))
-        epr_per_state = np.append(epr_per_state,final_epr)
+        epr_per_state.append(final_epr)
         
-
-    
-    #nn_model.eval()
-    scheduler.step(max_loss)
+    scheduler.step(average_loss)
     print("TOTAL REWARD")
     print(sum_reward)
     print("ave loss")
     print(average_loss)
     print("max_loss")
     print(max_loss)
+    
     print(optimizer.state_dict)
+    print(scheduler.state_dict())
     prediction_x_changing = nn_model(x_changing)
     
     total_prediction_changing_diff = sum(abs(prediction_x_changing - prediction_x_changing_previous))
     print("TOTALPREDICTION")
     print(total_prediction_changing_diff)
-    episodic_prediction_changing[update] = total_prediction_changing_diff
     
     #print(list(nn_model.parameters()))
     #print("**********************************************************************")
     #print("EPISODE FINISHED")
     #print("sum")
     #print(sum_reward)
-    episodic_epr[update] = final_epr
+    episodic_epr.append(final_epr)
     
+    episodic_loss.append(average_loss)
     
-    episodic_loss[update]=average_loss
-    
-    episodic_loss_max[update]=max_loss
-    episodic_reward[update]=sum_reward
-#%% SAVE MODEL
-episodic_epr=episodic_epr[0:update]
-episodic_reward=episodic_reward[0:update]
-episodic_loss=episodic_loss[0:update]
-episodic_loss_max=episodic_loss_max[0:update]
-episodic_prediction = episodic_prediction[0:update]
-episodic_prediction_changing = episodic_prediction_changing[0:update]
-plt.plot(episodic_loss)
-
+    episodic_loss_max.append(max_loss)
+    episodic_reward.append(sum_reward)
+    episodic_nn_step.append(nn_steps_taken)
+    episodic_random_step.append(random_steps_taken)
+    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\data\\'+'temp_episodic_loss_'+str(n_back_step)+'_'+str(learning_rate)+'_'+str(threshold)+'_sim4'+\
+               '.txt', episodic_loss, fmt='%f')
+    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\data\\'+'temp_episodic_random_step_'+str(n_back_step)+'_'+str(learning_rate)+'_'+str(threshold)+'_sim4'+\
+               '.txt', episodic_random_step, fmt='%f')
+    #save temporary copies to see
 #%%
-#gamma9 -> gamma=0.9
-#n8 -> n_back_step=8
-#k5 -> E=E-E/5 was used 
-#lr5e6 -> begin lr=0.5*e-6
-torch.save(nn_model, cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'complete_model_gly_tca_cell_gamma9_n8_k5_lr5e7_1.pth')
-#%% LOAD MODEL
-#nn_model = torch.load(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'complete_model_gly_tca_gog_gamma9_n3_k15_1.pth')
-#%%
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss_gamma9_n8_k5_lr5e7_1.txt', episodic_loss, fmt='%f')
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss_max_gamma9_n8_k5_lr5e7_1.txt', episodic_loss_max, fmt='%f')
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_reward_gamma9_n8_k5_lr5e7_1.txt', episodic_reward, fmt='%f')
-
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'final_states_gamma9_n8_k5_lr5e7_1.txt', final_states, fmt='%f')
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'epr_per_states_gamma9_n8_k5_lr5e7_1.txt', epr_per_state, fmt='%f')
-
-#%% Getting back the objects:
-#episodic_loss_loaded = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss_gamma9_n8_k15_1.txt', dtype=float)
-#episodic_loss_max_loaded = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss_max_gamma9_n8_k15_1.txt', dtype=float)
-#episodic_reward = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_reward_gamma9_n8_k15_1.txt', dtype=float)
-
-#final_states_loaded = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'final_states_gamma9_n8_k15_1.txt', dtype=float)
-#epr_per_state_loaded = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'epr_per_state_gamma9_n8_k15_1.txt', dtype=float)
+activity_method2 = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'activities_ruleot_method2.txt', dtype=float)
+epr_method2_ruleot=4.141253187991768
 
 
+begin=450 #truncate episodic data
+
+[fs,indices]=np.unique(final_states[begin:,:], axis=0, return_index=True)
+fs = final_states[begin:,:]
+
+fs_data=pd.DataFrame(columns=['Method','Activity','Reaction'])
+counter=0
+for i in range(0,len(Keq_constant)):
+    for j in range(0,fs[:,:].shape[0]):
+        
+        fs_data.loc[counter] = ['RL', fs[j,i], i]
+        counter+=1
 
 #%%
 figure_norm = 12 #convert to 17.1cm
@@ -725,21 +729,106 @@ Fontsize_Title=20
 Fontsize_Sub = 15
 Fontsize_Leg = 15
 
-fig = plt.figure(figsize=(figure_norm, figure_norm))
+fig = plt.figure(figsize=(figure_norm, 0.5*figure_norm))
+ax1 = fig.add_subplot(111)
+#ax2 = fig.add_subplot(212)
+
+
+epr_plot=epr_per_state[begin:]
+sns.boxplot(x='Reaction',
+            y='Activity',
+            data=fs_data,
+            hue='Method',
+            palette=sns.light_palette((210, 90, 60), input="husl"),
+            ax=ax1)
+
+#To make legend, plot first with label for legend
+sns.regplot(x=np.array([0]), y=np.array([activity_method2[2]]), scatter=True, fit_reg=False, marker='x',
+            ax=ax1,
+            label='CCC',
+            color='r',
+            scatter_kws={"s": 100})
+
+for i in range(1,Keq_constant.size):
+    sns.regplot(x=np.array([i]), y=np.array([activity_method2[i]]), scatter=True, fit_reg=False, marker='x',
+                ax=ax1,
+                color='r',
+                scatter_kws={"s": 100})
+
+
+#sns.distplot(epr_plot,rug=True, ax=ax2)
+#sns.regplot(x=np.array([epr_method2_ruleot]), y=np.array([1]), scatter=True, fit_reg=False, marker='x',
+#                ax=ax2,
+#                color='r',
+#               scatter_kws={"s": 100})
+
+ax1.set_xlabel('Reactions',fontsize=Fontsize_Sub)
+#ax2.set_xlabel('Entropy Production Rate, EPR',fontsize=Fontsize_Sub)
+ax1.set_ylabel('Enzyme Activity',fontsize=Fontsize_Sub)
+#ax2.set_ylabel('P(EPR)',fontsize=Fontsize_Sub)
+
+ax1.legend(fontsize=Fontsize_Leg, loc='lower left')
+#%%
+base=sum(delta_S_metab[delta_S_metab>0])
+plt.scatter(episodic_epr[episodic_epr>1],episodic_reward[episodic_epr>1])
+#%%
+plt.plot(episodic_loss)
+plt.xlabel("epochs")
+plt.ylabel("<L>")
+#%%
+plt.plot(episodic_reward[1:100])
+
+plt.xlabel("epochs")
+plt.ylabel("<R>")
+
+#%%
+#gamma9 -> gamma=0.9
+#n8 -> n_back_step=8
+#k5 -> E=E-E/5 was used 
+#lr5e6 -> begin lr=0.5*e-6
+
+torch.save(nn_model, cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'complete_model_gly_tca_gog_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(0.1)+'_sim1'+'.txt'+'.pth')
+
+#%%
+np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'episodic_loss_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim1'+'.txt', episodic_loss, fmt='%f')
+np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'episodic_loss_max_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim1'+'.txt', episodic_loss_max, fmt='%f')
+np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'episodic_reward_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim1'+'.txt', episodic_reward, fmt='%f')
+
+np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'final_states_gamma9_n'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim1'+'.txt', final_states, fmt='%f')
+np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'epr_per_state_gamma9_'+str(n_back_step)+'_k5_'\
+           +'_lr'+str(learning_rate)+'_threshold'+str(threshold)+'_eps'+str(epsilon_greedy_init)+'_sim1'+'.txt', epr_per_state, fmt='%f')
+
+
+#%% LOAD MODEL
+#nn_model = torch.load(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'complete_model_gly_tca_gog_gamma9_n3_k15_2.pth')
+#%% Getting back the objects:
+episodic_loss_loaded = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'episodic_loss_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
+episodic_loss_max_loaded = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'episodic_loss_max_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
+episodic_reward = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'episodic_reward_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
+
+final_states_loaded = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'final_states_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
+epr_per_state_loaded = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\models_final_data\\'+'epr_per_state_gamma9_n8_k5_lr5e6_1.txt', dtype=float)
+
+#%%
+fig = plt.figure(figsize=(figure_norm, 0.5*figure_norm))
 ax1 = fig.add_subplot(121)
 ax2 = fig.add_subplot(122)
 
-[fs,indices]=np.unique(final_states, axis=0, return_index=True)
+ax1.plot(episodic_loss, linewidth=2.5)
+ax2.plot(episodic_reward, linewidth=2.5)
 
-sns.boxplot(data=fs[1:,:],ax=ax1)
+ax1.set_xlabel('Episode', fontsize=Fontsize_Sub)
+ax2.set_xlabel('Episode',fontsize=Fontsize_Sub)
+ax1.set_ylabel('RMS Error',fontsize=Fontsize_Sub)
+ax2.set_ylabel('Total Rewards per Episode',fontsize=Fontsize_Sub)
 
-sns.distplot(epr_per_state[indices[1:]], ax=ax2)
-
-
-ax1.set_xlabel('Reactions',fontsize=Fontsize_Sub)
-ax2.set_xlabel('Entropy Production Rate, EPR',fontsize=Fontsize_Sub)
-ax1.set_ylabel('Enzyme Activity',fontsize=Fontsize_Sub)
-ax2.set_ylabel('P(EPR)',fontsize=Fontsize_Sub)
+ax1.annotate("A", xy=(-0.1, 1.0), xycoords="axes fraction",fontsize=Fontsize_Title)
+ax2.annotate("B", xy=(-0.1, 1.0), xycoords="axes fraction",fontsize=Fontsize_Title)
 #%%
 
 base=sum(delta_S_metab[delta_S_metab>0])
@@ -747,27 +836,13 @@ plt.scatter(episodic_epr[episodic_reward>8],episodic_reward[episodic_reward>8])
 
 plt.xlabel("epr")
 plt.ylabel("reward")
-#%%
-torch.save(nn_model, cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'complete_model_gamma9_n3_k=15_1.pth')
-#%% LOAD MODEL
-#nn_model = torch.load(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'complete_model_gamma9_n3_k=15.pth')
 
 #%%
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss_gamma9_n3_k=15_1.txt', episodic_loss, fmt='%f')
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_reward_gamma9_n3_k=15_1.txt', episodic_reward, fmt='%f')
-np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss_max_gamma9_n3_k=15_1.txt', episodic_loss_max, fmt='%f')
-
-
-#%% Getting back the objects:
-#episodic_loss = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_loss.txt', dtype=float)
-#episodic_reward = np.loadtxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'episodic_reward.txt', dtype=float)
-
-#%%
-plt.plot(episodic_loss)
+plt.plot(episodic_loss[0:150])
 plt.xlabel("epochs")
 plt.ylabel("<L>")
 #%%
-plt.plot(episodic_reward)
+plt.plot(episodic_reward[0:150])
 
 plt.xlabel("epochs")
 plt.ylabel("<R>")
@@ -831,7 +906,7 @@ while( (i < 1000) and (np.max(delta_S_metab) > 0) ):
         
     
     if (i > 0):
-        reward = machine_learning_functions.reward_value(v_log_counts, \
+        reward = me.reward_value(v_log_counts, \
                                                          v_log_counts_matrix1[i-1,:],\
                                                          KQ_f, KQ_r, E_regulation)
      
@@ -862,7 +937,7 @@ opt_concs1 = v_log_counts
 E_reg1 = E_regulation
 rxn_flux_1 = rxn_flux
 
-#np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'activities_ruleot_method2.txt', E_reg1, fmt='%f')
+np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'activities_ruleot_method2.txt', E_reg1, fmt='%f')
 #np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_CELLWALL\\'+'activities_experiment_method2.txt', E_reg1, fmt='%f')
 
 #
@@ -1190,6 +1265,33 @@ display(forward_rate_constants)
 
 
 #%% Make dictionary with metabolites indices and BiGG metabolite abbreviates so Escher software can read the json correctly
+
+reactions = pd.Series(['CSm', 'ACONTm', 'ICDHxm', 'AKGDam', 'SUCOASm', 'SUCD1m', 'FUMm',
+       'MDHm', 'GAPD', 'PGK', 'TPI', 'FBA', 'PYK', 'PGM', 'ENO', 'HEX1', 'PGI',
+       'PFK', 'PYRt2m', 'PDHm', 'G6PDH2r', 'PGL', 'GND', 'RPE', 'RPI', 'TKT2',
+       'TALA', 'FBA3', 'PFK_3', 'TKT1',
+       'Glutamine-fructose-6-phosphate aminotransferase',
+       'Glucosamine-6-phosphate N-acetyltransferase',
+       'N-acetylglucosamine-phosphate mutase',
+       'UDP N-acetylglucosamine pyrophosphorylase', 'Hyaluronan Synthase',
+       'Phosphoglucomutase', 'UTP-glucose-1-phosphate uridylyltransferase',
+       '1,3-beta-glucan synthase', 'Citrate-oxaloacetate exchange',
+       'CITRATE_LYASE', 'MDHc', 'MDH-NADPc', 'ME1c', 'ME2c',
+       'Pyruvate Carboxylase', 'Aldose 1-epimerase', 'HEX1a', 'PGI-1'])
+    
+bigg_reaction = pd.Series(['CSm','ACONTm', 'ICDHxm', 'AKGDam', 'SUCOASm', 'SUCD1m', 'FUMm',
+       'MDHm', 'GAPD', 'PGK', 'TPI', 'FBA', 'PYK', 'PGM', 'ENO', 'HEX1', 'PGI',
+       'PFK', 'PYRt2m', 'PDHm', 'G6PDH2r', 'PGL', 'GND', 'RPE', 'RPI', 'TKT2',
+       'TALA', 'FBA3', 'PFK_3', 'TKT1',
+       'GF6PTA',
+       'G1PACT',
+       'ACGAMPM',
+       'UAGDP','HAS1',
+       'PGCM','G1PUT_h',
+       '13GS','EX_oaa_e',
+       'CITL','MDH','MDH_nadp_fi','ME1', 'ME2',
+       'PCm','A1E','HEX1','PGI'])
+    
 metabolites = pd.Series(['OXALOACETATE:MITOCHONDRIA', 'ISOCITRATE:MITOCHONDRIA',
        'OXALOACETATE:CYTOSOL', 'CITRATE:CYTOSOL', '(S)-MALATE:CYTOSOL',
        'PHOSPHOENOLPYRUVATE:CYTOSOL', 'D-FRUCTOSE_6-PHOSPHATE:CYTOSOL',
