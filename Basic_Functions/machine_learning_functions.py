@@ -32,8 +32,8 @@ mu0=[]
 gamma=[]
 num_rxns=[]
 
-penalty_reward = -1.5
-penalty_reward_scalar=-1
+penalty_exclusion_reward = -10.0
+penalty_reward_scalar=0.0
 
 range_of_activity_scale = 1.0
 log_scale_activity = 0.4
@@ -57,7 +57,7 @@ Method = 'lm'
 #Physically this is trying to minimizing the free energy change in each reaction. 
 def state_value(nn_model, x):
     
-    val = nn_model(torch.log(1.0 + torch.exp(range_of_activity_scale*x)))
+    #val = nn_model(torch.log(1.0 + torch.exp(range_of_activity_scale*x)))
     
     scale_to_one = np.log(range_of_activity_scale + (1**log_scale_activity))
     x_scaled = (1.0 / scale_to_one) * torch.log(1.0 + (x**log_scale_activity))
@@ -75,19 +75,35 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
     #val_future = max_entropy_functions.calc_deltaS_metab(v_log_counts_future, target_v_log_counts)
     
     #https://www.xarg.org/2016/06/the-log-sum-exp-trick-in-machine-learning/
-    scale_old = np.max(v_log_counts_old - target_v_log_counts)
+
+    #here we use the mean for the scaling. The logic is as follows:
+    #
+    scale_old_max = np.max(v_log_counts_old - target_v_log_counts)
+    scale_old_min = np.min(v_log_counts_old - target_v_log_counts)
+    scale_old = (scale_old_max + scale_old_min)/2.0
     
-    e_val_old = np.exp(v_log_counts_old - target_v_log_counts-scale_old)
+    e_val_old = np.exp(v_log_counts_old - target_v_log_counts - scale_old)
     e_val_old = scale_old + np.log(np.sum(e_val_old))
       
-    scale_future = np.max(v_log_counts_future - target_v_log_counts)
+    scale_future_max = np.max(v_log_counts_future - target_v_log_counts)
+    scale_future_min = np.min(v_log_counts_future - target_v_log_counts)
+    scale_future = (scale_future_max + scale_future_min)/2.0
+
     e_val_future = np.exp(v_log_counts_future - target_v_log_counts - scale_future)
     e_val_future = scale_future  + np.log(np.sum(e_val_future))
+
+    if ( (np.isnan(e_val_future).any()) or (np.isnan(e_val_old).any()) ):
+        print(v_log_counts_future)
+        print(v_log_counts_old)
+    #if (( (v_log_counts_future>50).any()) or (v_log_counts_future<-50).any()):
+    #    print(min(np.exp(v_log_counts_future - target_v_log_counts - scale_future)))
+    #    print(max(np.exp(v_log_counts_future - target_v_log_counts - scale_future)))
+    #   print(scale_future)
 
     reward_s = e_val_old - e_val_future
     #val_old[val_old<0.0] = 0
     #val_future[val_future<0] = 0
-    
+
     #reward_s = np.sum(val_old - val_future) #this is positive if val_future is less, so we need
     
     #originally, does nothing, but turns to penalty when regulating a new reaction
@@ -101,16 +117,15 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
         #then you regulated a new reaction:
         psi = penalty_reward_scalar
 
-    if ((reward_s <= 0.0)):
-        final_reward = penalty_reward
-        #final_reward += reward_s
+    if ((reward_s < 0.0)):
+        final_reward = penalty_exclusion_reward
         
-    if (reward_s > 0.0):
+    if (reward_s >= 0.0):
         final_reward = psi * reward_s
         #if negative (-0.01) -> take fastest path
         #if positive (0.01) -> take slowest path
         
-    if ((scale_future<=0.0).all()):
+    if ((  scale_future_max <=0.0)):
         #The final reward is meant to maximize the EPR value. However, there was some residual error in ds_metab
         #that must be taken into account. We therefore add the last reward_s to the EPR value. 
         
@@ -405,7 +420,7 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
                                       KQ_f_matrix[:,act], KQ_r_matrix[:,act],\
                                       trial_state_sample, state)
 
-        if (current_reward == penalty_reward):
+        if (current_reward == penalty_exclusion_reward):
             rxn_choices.remove(act)
             #print(current_reward)
         #best action is defined by the current chosen state and value 
@@ -470,8 +485,7 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
 #     breakpoint()
 # =============================================================================
     #rxn_choices.remove(action_choice)
-    #print("state_value_vec")
-    #print(state_value_vec)
+
     used_random_step=False
     unif_rand = np.random.uniform(0,1)
     if ( (unif_rand < epsilon_greedy) and (len(rxn_choices) > 0)):
@@ -487,7 +501,7 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
 
     #print("current_reward")
     #print(current_reward_vec)
-    if (current_reward_vec == penalty_reward).all():
+    if (current_reward_vec == penalty_exclusion_reward).all():
         print("OUT OF REWARDS")
         action_choice=-1
         #breakpoint()
