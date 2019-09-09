@@ -37,7 +37,7 @@ def run(argv):
     epsilon=0.5 #4th
     eps_threshold=25 #5th
     gamma = 0.9 #6th
-    updates = 1
+    updates = 500
     penalty_reward_scalar=0.0
 
     #load input
