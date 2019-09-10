@@ -53,9 +53,18 @@ def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_conc
     #counts = np.exp(log_counts) #convert to counts
     #delta_counts = counts+delta_increment_for_small_concs;
     #log_delta = safe_ln(delta_counts);
+    scale_min = np.min(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))
+    scale_max = np.max(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))
+    scale = (scale_max + scale_min)/2.0
+    
+    scaled_val = -direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)) - scale
+    Q_inv_scale = np.exp(scale) * np.exp(scaled_val)
+
+
     Q_inv = np.exp(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))
 
-    KQ = np.multiply(Keq_constant,Q_inv);
+    
+    KQ = np.multiply(Keq_constant,Q_inv)
 
     return(KQ)
 
@@ -64,7 +73,7 @@ def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_conc
 
 
 def oddsDiff(log_vcounts, log_fcounts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, E_Regulation):
-    
+
     log_metabolites = np.append(log_vcounts,log_fcounts)
     KQ_f = odds(log_metabolites, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq);
     Keq_inverse = np.power(Keq,-1);
