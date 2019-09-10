@@ -37,7 +37,7 @@ def run(argv):
     epsilon=0.5 #4th
     eps_threshold=25 #5th
     gamma = 0.9 #6th
-    updates = 500
+    updates = 1
     penalty_reward_scalar=0.0
 
     #load input
@@ -52,6 +52,9 @@ def run(argv):
 
     sim_number=int(sys.argv[1])
     n_back_step=int(sys.argv[2])
+    if (n_back_step < 1):
+        print('n must be larger than zero')
+        return
     if (total > 3):
         use_experimental_data=bool(int(sys.argv[3]))
     if (total > 4):
@@ -483,7 +486,7 @@ def run(argv):
     ipolicy = 7 #use ipolicy=1 or 4
     reaction_choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ_f, E_regulation, res_lsq1.x)                                                        
 
-     #%%
+     #%
     
     #device = torch.device("cpu")
     
@@ -551,7 +554,7 @@ def run(argv):
 
     for update in range(0,updates):
         
-        x_changing = 10*torch.rand(1000, D_in, device=device)
+        x_changing = 1*torch.rand(1000, D_in, device=device)
     
         
         #generate state to use
@@ -606,25 +609,39 @@ def run(argv):
         episodic_reward.append(sum_reward)
         episodic_nn_step.append(nn_steps_taken)
         episodic_random_step.append(random_steps_taken)
-        np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+'temp_episodic_loss_'+str(n_back_step) +\
-                   '_'+str(learning_rate)+'_'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+\
-                    '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +
-                   '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_loss, fmt='%f')
+        np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+
+                    'temp_episodic_loss_'+str(n_back_step) +
+                    '_lr'+str(learning_rate)+
+                    '_'+str(eps_threshold)+
+                    '_eps'+str(epsilon_greedy_init)+
+                    '_'+str(sim_number)+
+                    '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                    '_use_experimental_metab_'+str(int(use_experimental_data))+ 
+                    '.txt', episodic_loss, fmt='%f')
 
-        np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+'temp_epr_'+str(n_back_step) +\
-                   '_'+str(learning_rate)+'_'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+\
-                    '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +
-                   '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_epr, fmt='%f')
+        np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+
+                    'temp_epr_'+str(n_back_step) +
+                    '_lr'+str(learning_rate)+
+                    '_'+str(eps_threshold)+
+                    '_eps'+str(epsilon_greedy_init)+
+                    '_'+str(sim_number)+
+                    '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                    '_use_experimental_metab_'+str(int(use_experimental_data))+
+                    '.txt', episodic_epr, fmt='%f')
 
-        np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+'temp_episodic_random_step_'+str(n_back_step)+\
-                   '_'+str(learning_rate)+'_'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+\
-                    '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +
-                   '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_random_step, fmt='%f')
+        np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+
+                    'temp_episodic_random_step_'+str(n_back_step)+
+                    '_lr'+str(learning_rate)+
+                    '_'+str(eps_threshold)+
+                    '_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+
+                    '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                    '_use_experimental_metab_'+str(int(use_experimental_data))+
+                    '.txt', episodic_random_step, fmt='%f')
         
         if (update > 200):
-            if (max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025):
+            if ((max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025) and (update > 350)):
                 break
-        #save temporary copies to see
+        
     
     #%%
     #gamma9 -> gamma=0.9
@@ -632,34 +649,64 @@ def run(argv):
     #k5 -> E=E-E/5 was used 
     #lr5e6 -> begin lr=0.5*e-6
     
-    torch.save(nn_model, cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'complete_model_gly_tca_gog_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.pth')
+    torch.save(nn_model, cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+
+                'complete_model_gly_tca_gog_gamma9_n'+str(n_back_step)+'_k5_'\
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_' +str(int(use_experimental_data))+
+                '_sim'+str(sim_number) + '.pth')
     
-    #%%
-    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'episodic_loss_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_loss, fmt='%f')
-    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'episodic_loss_max_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_loss_max, fmt='%f')
-    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'episodic_reward_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_reward, fmt='%f')
     
-    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'final_states_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', final_states, fmt='%f')
+    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+
+                'episodic_loss_gamma9_n'+str(n_back_step)+'_k5_'
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+
+                '.txt', episodic_loss, fmt='%f')
 
-    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+'epr_per_state_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', epr_per_state, fmt='%f')
+    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+
+                'episodic_loss_max_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+
+                '.txt', episodic_loss_max, fmt='%f')
+
+    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+
+                'episodic_reward_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+               '_threshold'+str(eps_threshold)+
+               '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+
+                '.txt', episodic_reward, fmt='%f')
+    
+    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+
+                'final_states_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+\
+                '.txt', final_states, fmt='%f')
+
+    np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data/'+
+                'epr_per_state_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_' +str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+
+                '.txt', epr_per_state, fmt='%f')
 
 if __name__ == '__main__':
     # Map command line arguments to function arguments.
