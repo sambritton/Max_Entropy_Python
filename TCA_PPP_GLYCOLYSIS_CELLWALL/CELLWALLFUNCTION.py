@@ -690,25 +690,39 @@ def run(argv):
         episodic_reward.append(sum_reward)
         episodic_nn_step.append(nn_steps_taken)
         episodic_random_step.append(random_steps_taken)
-        np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+'temp_episodic_loss_'+str(n_back_step) +\
-                   '_'+str(learning_rate)+'_'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+\
-                    '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +
-                   '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_loss, fmt='%f')
+        np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+
+                    'temp_episodic_loss_'+str(n_back_step) +
+                    '_lr'+str(learning_rate)+
+                    '_'+str(eps_threshold)+
+                    '_eps'+str(epsilon_greedy_init)+
+                    '_'+str(sim_number)+
+                    '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                    '_use_experimental_metab_'+str(int(use_experimental_data))+ 
+                    '.txt', episodic_loss, fmt='%f')
 
-        np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+'temp_epr_'+str(n_back_step) +\
-                   '_'+str(learning_rate)+'_'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+\
-                    '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +
-                   '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_epr, fmt='%f')
+        np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+
+                    'temp_epr_'+str(n_back_step) +
+                    '_lr'+str(learning_rate)+
+                    '_'+str(eps_threshold)+
+                    '_eps'+str(epsilon_greedy_init)+
+                    '_'+str(sim_number)+
+                    '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                    '_use_experimental_metab_'+str(int(use_experimental_data))+
+                    '.txt', episodic_epr, fmt='%f')
 
-        np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+'temp_episodic_random_step_'+str(n_back_step)+\
-                   '_'+str(learning_rate)+'_'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+\
-                    '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +
-                   '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_random_step, fmt='%f')
+        np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+
+                    'temp_episodic_random_step_'+str(n_back_step)+
+                    '_lr'+str(learning_rate)+
+                    '_'+str(eps_threshold)+
+                    '_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+
+                    '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                    '_use_experimental_metab_'+str(int(use_experimental_data))+
+                    '.txt', episodic_random_step, fmt='%f')
         
         if (update > 200):
-            if (max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025):
+            if ((max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025) and (update > 350)):
                 break
-        #save temporary copies to see
+        
     
     #%%
     #gamma9 -> gamma=0.9
@@ -716,37 +730,71 @@ def run(argv):
     #k5 -> E=E-E/5 was used 
     #lr5e6 -> begin lr=0.5*e-6
     
-    torch.save(nn_model, cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+'complete_model_gly_tca_gog_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.pth')
+    torch.save(nn_model, cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
+                'complete_model_gly_tca_gog_gamma9_n'+str(n_back_step)+'_k5_'\
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_' +str(int(use_experimental_data))+
+                '_sim'+str(sim_number) + '.pth')
     
-    #%%
-    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+'episodic_loss_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_loss, fmt='%f')
-    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+'episodic_loss_max_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_loss_max, fmt='%f')
-    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+'episodic_reward_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', episodic_reward, fmt='%f')
     
-    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+'final_states_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_' + str(me.penalty_reward_scalar) +\
-                '_use_experimental_metab_' +str(int(use_experimental_data)) + '.txt', final_states, fmt='%f')
+    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
+                'episodic_loss_gamma9_n'+str(n_back_step)+'_k5_'
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+
+                '.txt', episodic_loss, fmt='%f')
 
-    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+'epr_per_state_gamma9_n'+str(n_back_step)+'_k5_'\
-               +'_lr'+str(learning_rate)+'_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+'_sim'+str(sim_number)+\
-                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar) +'_use_experimental_metab_' +str(int(use_experimental_data)) +'.txt', epr_per_state, fmt='%f')
+    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
+                'episodic_loss_max_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+'_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+
+                '.txt', episodic_loss_max, fmt='%f')
 
+    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
+                'episodic_reward_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+               '_threshold'+str(eps_threshold)+
+               '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+
+                '.txt', episodic_reward, fmt='%f')
+    
+    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
+                'final_states_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+\
+                '.txt', final_states, fmt='%f')
+
+    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
+                'epr_per_state_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_' +str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+
+                '.txt', epr_per_state, fmt='%f')
 
 if __name__ == '__main__':
     # Map command line arguments to function arguments.
     print(sys.argv[:])
     print(*sys.argv[:])
-    run(sys.argv[:])
+    run(sys.argv[:])    
+    
+    
+    
+    
