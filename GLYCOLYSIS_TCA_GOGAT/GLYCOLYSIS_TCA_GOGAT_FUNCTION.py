@@ -485,9 +485,7 @@ def run(argv):
     
     ipolicy = 7 #use ipolicy=1 or 4
     reaction_choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ_f, E_regulation, res_lsq1.x)                                                        
-
-     #%
-    
+    breakpoint()
     #device = torch.device("cpu")
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
