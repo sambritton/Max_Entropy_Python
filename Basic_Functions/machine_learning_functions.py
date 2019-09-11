@@ -52,7 +52,9 @@ import multiprocessing as mp
 from multiprocessing import Pool
 import torch
 
-Method = 'lm'
+Method1 = 'lm'
+Method2 = 'dogbox'
+Method3 = 'trf'
 
 #Physically this is trying to minimizing the free energy change in each reaction. 
 def state_value(nn_model, x):
@@ -157,7 +159,12 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     states_matrix[:,0] = state_sample
     
     
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
+    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method1,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
+    if (res_lsq.success==False):
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
+        if (res_lsq.success==False):
+            res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
+    
     v_log_counts_matrix[:,0] = res_lsq.x.copy()
     #v_log_counts_matrix[:,0]=v_log_counts_static.copy()
     log_metabolites = np.append(v_log_counts_matrix[:,0], f_log_counts)
@@ -168,7 +175,7 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     Keq_inverse = np.power(Keq_constant,-1)
     KQ_r_matrix[:,0] = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse,-1);
     
-    [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts_matrix[:,0], f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f_matrix[:,0], KQ_r_matrix[:,0], states_matrix[:,0])
+    #[RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts_matrix[:,0], f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f_matrix[:,0], KQ_r_matrix[:,0], states_matrix[:,0])
     #A_init = max_entropy_functions.calc_A(v_log_counts_matrix[:,0], f_log_counts, S_mat, Jac, states_matrix[:,0] )
     
     delta_S_metab_matrix[:,0] = max_entropy_functions.calc_deltaS_metab(v_log_counts_matrix[:,0], target_v_log_counts);
@@ -338,8 +345,13 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         
     rxn_choices = [i for i in range(num_rxns)]
     
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
+    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method1,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
+    if (res_lsq.success==False):
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
+        if (res_lsq.success==False):
+            res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
     
+
     #v_log_counts = v_log_counts_path.copy()
     v_log_counts = res_lsq.x
     if (np.sum(np.abs(v_log_counts - v_log_counts_path)) > 0.001):
@@ -387,8 +399,13 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         trial_state_sample[React_Choice] = newE
         states_matrix[:,act]=trial_state_sample.copy()
         #re-optimize
-        new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
-            
+        new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method1,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
+        if (res_lsq.success==False):
+            new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
+            if (res_lsq.success==False):
+                new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
+        
+        
         new_v_log_counts = new_res_lsq.x
         v_log_counts_matrix[:,act]=new_v_log_counts.copy()
         #breakpoint()

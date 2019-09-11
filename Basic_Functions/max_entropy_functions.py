@@ -15,6 +15,11 @@ from scipy.optimize import least_squares
 def safe_ln(x):
     return np.log(x)
 
+def exp_normalize(x):
+    b = x.max()
+    y = np.exp(x - b)
+    return y / y.sum()
+
 def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
 
     KQ_f_reg = E_Regulation * KQ_f
@@ -32,23 +37,34 @@ def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
           +np.sum(KQ_r_reg[kq_inv_ge1_idx] * safe_ln(KQ_r[kq_inv_ge1_idx]))/sumOdds
     return epr
 
+
+# try using np.longdouble
 def derivatives(log_vcounts,log_fcounts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, E_Regulation):
 
     nvar = log_vcounts.size
     log_metabolites = np.append(log_vcounts,log_fcounts) #log_counts
-    KQ_f = odds(log_metabolites,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, 1); #internal conversion to counts
+    #KQ_f = odds(log_metabolites,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, 1); #internal conversion to counts
+    EKQ_f = odds_alternate(E_Regulation,log_metabolites,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, 1); #internal conversion to counts
     Keq_inverse = np.power(Keq,-1);
-    KQ_r = odds(log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse, -1);#internal conversion to counts
-    deriv = S_mat.T.dot((E_Regulation *(KQ_f - KQ_r)).T);
-    deriv = deriv[0:nvar]
+    #KQ_r = odds(log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse, -1);#internal conversion to counts
+    EKQ_r = odds_alternate(E_Regulation,log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse, -1);#internal conversion to counts
+    #deriv_prev = S_mat.T.dot((E_Regulation *(KQ_f - KQ_r)).T);
     
+    deriv = S_mat.T.dot((EKQ_f-EKQ_r).T)
+    deriv = deriv[0:nvar]
     return(deriv.reshape(deriv.size,))
 
 
 # In[ ]:
 
-
 def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, direction = 1):
+
+    Q_inv = np.exp(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))    
+    KQ = np.multiply(Keq_constant,Q_inv)
+    
+    return(KQ)
+
+def odds_alternate(E_Regulation,log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, direction = 1):
     
     #counts = np.exp(log_counts) #convert to counts
     #delta_counts = counts+delta_increment_for_small_concs;
@@ -58,22 +74,34 @@ def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_conc
     scale = (scale_max + scale_min)/2.0
     
     scaled_val = -direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)) - scale
-    Q_inv_scale = np.exp(scale) * np.exp(scaled_val)
+    #Q_inv_scale = np.exp(scale) * np.exp(scaled_val)
 
-
-    Q_inv = np.exp(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))
-
+    log_Q_inv = (-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))
     
-    KQ = np.multiply(Keq_constant,Q_inv)
+    log_EKQ = np.log(np.multiply(E_Regulation,Keq_constant)) + log_Q_inv
 
-    return(KQ)
+    q_max = np.max(abs(log_Q_inv))
 
+    ekq_max = np.max(abs(log_EKQ))
 
-# In[ ]:
+    if (q_max < ekq_max):
+        Q_inv = np.exp(log_Q_inv)    
+        KQ = np.multiply(Keq_constant,Q_inv)
+        EKQ = np.multiply(E_Regulation,KQ)
+    else:
+        log_EKQ = np.log(np.multiply(E_Regulation,Keq_constant)) + log_Q_inv
+        EKQ = np.exp(log_EKQ)
 
+    #print("log_EKQ")
+    #print(log_EKQ)
+    
+    #print("log_Q_inv")
+    #print(log_Q_inv)
+    #breakpoint()
+    return(EKQ)
 
 def oddsDiff(log_vcounts, log_fcounts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, E_Regulation):
-
+    
     log_metabolites = np.append(log_vcounts,log_fcounts)
     KQ_f = odds(log_metabolites, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq);
     Keq_inverse = np.power(Keq,-1);
@@ -93,7 +121,6 @@ def calc_Jac2(log_vcounts, log_fcounts, S_mat, delta_increment_for_small_concs, 
 #an N metabolite time-differential equations by (rows) by 
 #N metabolites derivatives (columns)
 #J_ij = d/dx_i(df_j/dt)
-
     metabolites = np.append(np.exp(log_vcounts), np.exp(log_fcounts))
     delta_metabolites = metabolites + delta_increment_for_small_concs
     delta_recip_metabolites = np.power(delta_metabolites, -1)
