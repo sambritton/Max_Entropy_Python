@@ -1265,33 +1265,6 @@ display(forward_rate_constants)
 
 
 #%% Make dictionary with metabolites indices and BiGG metabolite abbreviates so Escher software can read the json correctly
-
-reactions = pd.Series(['CSm', 'ACONTm', 'ICDHxm', 'AKGDam', 'SUCOASm', 'SUCD1m', 'FUMm',
-       'MDHm', 'GAPD', 'PGK', 'TPI', 'FBA', 'PYK', 'PGM', 'ENO', 'HEX1', 'PGI',
-       'PFK', 'PYRt2m', 'PDHm', 'G6PDH2r', 'PGL', 'GND', 'RPE', 'RPI', 'TKT2',
-       'TALA', 'FBA3', 'PFK_3', 'TKT1',
-       'Glutamine-fructose-6-phosphate aminotransferase',
-       'Glucosamine-6-phosphate N-acetyltransferase',
-       'N-acetylglucosamine-phosphate mutase',
-       'UDP N-acetylglucosamine pyrophosphorylase', 'Hyaluronan Synthase',
-       'Phosphoglucomutase', 'UTP-glucose-1-phosphate uridylyltransferase',
-       '1,3-beta-glucan synthase', 'Citrate-oxaloacetate exchange',
-       'CITRATE_LYASE', 'MDHc', 'MDH-NADPc', 'ME1c', 'ME2c',
-       'Pyruvate Carboxylase', 'Aldose 1-epimerase', 'HEX1a', 'PGI-1'])
-    
-bigg_reaction = pd.Series(['CSm','ACONTm', 'ICDHxm', 'AKGDam', 'SUCOASm', 'SUCD1m', 'FUMm',
-       'MDHm', 'GAPD', 'PGK', 'TPI', 'FBA', 'PYK', 'PGM', 'ENO', 'HEX1', 'PGI',
-       'PFK', 'PYRt2m', 'PDHm', 'G6PDH2r', 'PGL', 'GND', 'RPE', 'RPI', 'TKT2',
-       'TALA', 'FBA3', 'PFK_3', 'TKT1',
-       'GF6PTA',
-       'G1PACT',
-       'ACGAMPM',
-       'UAGDP','HAS1',
-       'PGCM','G1PUT_h',
-       '13GS','EX_oaa_e',
-       'CITL','MDH','MDH_nadp_fi','ME1', 'ME2',
-       'PCm','A1E','HEX1','PGI'])
-    
 metabolites = pd.Series(['OXALOACETATE:MITOCHONDRIA', 'ISOCITRATE:MITOCHONDRIA',
        'OXALOACETATE:CYTOSOL', 'CITRATE:CYTOSOL', '(S)-MALATE:CYTOSOL',
        'PHOSPHOENOLPYRUVATE:CYTOSOL', 'D-FRUCTOSE_6-PHOSPHATE:CYTOSOL',
