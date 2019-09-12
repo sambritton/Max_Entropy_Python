@@ -144,6 +144,8 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     nn_steps_taken=0
     
     final_state=[]
+    final_KQ_f=[]
+    final_KQ_r=[]
     reached_terminal_state=False
     average_loss=[]
     
@@ -226,6 +228,9 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
                 
                 reached_terminal_state = True
                 final_state=states_matrix[:,t+1].copy()
+                final_KQ_f=KQ_f_matrix[:,t+1].copy()
+                final_KQ_r=KQ_r_matrix[:,t+1].copy()
+                final_reward=epr_path
                 print("**************************************Path Length ds<0******************************************")
                 print(end_of_path)
                 print("Final STATE")
@@ -233,19 +238,7 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
                 print(rxn_flux_path)
                 print("original epr")
                 print(epr_path)
-                if (alternative_reward):
-
-                    temp = states_matrix[:,t+1]*KQ_f_matrix[:,t+1]
-                    epr_path=epr_path/(temp[15])
-                    print('using alternat reward')
-                    print(epr_path)
-                    print('E_KQ_15')
-                    print(states_matrix[:,t+1][15])
-                    print(KQ_f_matrix[:,t+1][15])
-                    print('episode reward - last')
-                    print(sum_reward_episode-epr_path)
                 
-                final_reward=epr_path
                 
 
 # =============================================================================
@@ -320,8 +313,8 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     #print(average_loss)
     print("index of max error on path")
     print(average_loss.index(max(average_loss)))
-    return [sum_reward_episode, average_loss_episode,max(average_loss),final_reward, final_state, reached_terminal_state,\
-            random_steps_taken,nn_steps_taken]
+    return [sum_reward_episode, average_loss_episode,max(average_loss),final_reward, final_state, final_KQ_f,final_KQ_r,\
+            reached_terminal_state, random_steps_taken,nn_steps_taken]
 
 
 #%%
