@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --job-name="GLYCOLYSIS_n2_nodata"
-#SBATCH -p gpu # This is the default partition, you can use any of the following; intel, batch, highmem, gpu
+#SBATCH -p gpu 
 #SBATCH -N 1
 #SBATCH -p shared
 #SBATCH --gres=gpu:1
