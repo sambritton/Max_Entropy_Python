@@ -92,12 +92,6 @@ def odds_alternate(E_Regulation,log_counts,mu0,S_mat, R_back_mat, P_mat, delta_i
         log_EKQ = np.log(np.multiply(E_Regulation,Keq_constant)) + log_Q_inv
         EKQ = np.exp(log_EKQ)
 
-    #print("log_EKQ")
-    #print(log_EKQ)
-    
-    #print("log_Q_inv")
-    #print(log_Q_inv)
-    #breakpoint()
     return(EKQ)
 
 def oddsDiff(log_vcounts, log_fcounts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, E_Regulation):
@@ -112,8 +106,6 @@ def oddsDiff(log_vcounts, log_fcounts, mu0, S_mat, R_back_mat, P_mat, delta_incr
   
     return(KQdiff)
 
-
-# In[ ]:
 
 
 def calc_Jac2(log_vcounts, log_fcounts, S_mat, delta_increment_for_small_concs, KQ_forward, KQ_reverse, E_Regulation):
@@ -135,10 +127,6 @@ def calc_Jac2(log_vcounts, log_fcounts, S_mat, delta_increment_for_small_concs, 
     
     return (RR, Jac)
 
-
-# In[ ]:
-
-
 def calc_A(log_vcounts, log_fcounts, S_mat, Jac, E_Regulation):
 # A is the linear stability matrix where the Aij = df_i/dx_j * x_j
 # A is an N metabolite time-differential equations by (rows) by 
@@ -151,10 +139,6 @@ def calc_A(log_vcounts, log_fcounts, S_mat, Jac, E_Regulation):
     metabolites = np.append(np.exp(log_vcounts), np.exp(log_fcounts))
     A = (metabolites*Jac)
     return(A)
-
-
-# In[ ]:
-
 
 def conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR):
     #ccc = d log(concentration) / d log (rate)
@@ -178,10 +162,6 @@ def conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR):
     fcc = np.identity(len(fcc_temp)) - fcc_temp
 
     return [ccc,fcc]
-
-
-# In[ ]:
-
 
 def calc_deltaS(log_vcounts, log_fcounts, S_mat, KQ):
     #vcounts = np.exp(log_vcounts)
@@ -211,11 +191,6 @@ def calc_deltaS(log_vcounts, log_fcounts, S_mat, KQ):
     delta_S[row] = PdotMetab_Reverse - PdotTargetMetab_Reverse
     
     return delta_S
-    
-
-
-# In[ ]:
-
 
 def calc_deltaS_metab(v_log_counts, target_v_log_counts ):
 # =============================================================================
@@ -235,10 +210,6 @@ def calc_deltaS_metab(v_log_counts, target_v_log_counts ):
     delta_S_metab = v_log_counts - target_v_log_counts
     
     return delta_S_metab
-
-
-# In[ ]:
-
 
 def get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ, E_regulation, v_counts):
     
@@ -286,9 +257,6 @@ def get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ, E_regulation, v_counts)
         
         if (ipolicy == 4):
         
-            #print("delta_S")
-            #print(delta_S)
-                
             temp = ccc[np.ix_(sm_idx,S_index)]#np.ix_ does outer product
                 
             temp2 = (temp > 0) #ccc>0 means derivative is positive (dlog(conc)/dlog(activity)>0) 
@@ -331,8 +299,6 @@ def get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ, E_regulation, v_counts)
         print("in function get_enzyme2regulate")
         print("all errors gone, fully uptimized")
         return -1
-
-# In[ ]:
 
 #use delta_S as args input variable to use method1 (E=E/2) when delta_S_val is small
 def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts, 
