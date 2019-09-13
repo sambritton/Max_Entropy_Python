@@ -94,8 +94,8 @@ def run(argv):
     # In[3]:
     
     
-    with open( cwd + '/TCA_PPP_GLYCOLYSIS_CELLWALL/TCA_PPP_Glycolysis_CellWall3b.dat', 'r') as f:
-      print(f.read())
+    #with open( cwd + '/TCA_PPP_GLYCOLYSIS_CELLWALL/TCA_PPP_Glycolysis_CellWall3b.dat', 'r') as f:
+    #  print(f.read())
       
     
     # In[5]:
@@ -197,8 +197,8 @@ def run(argv):
     # Delete any columns/metabolites that have all zeros in the S matrix:
     S_active = S_active.loc[:, (S_active != 0).any(axis=0)]
     np.shape(S_active.values)
-    print(S_active.shape)
-    print(S_active)
+    #print(S_active.shape)
+    #print(S_active)
     reactions[full_rxn] = reactions[left] + ' = ' + reactions[right]
     
     
@@ -227,7 +227,7 @@ def run(argv):
                     reactions.loc[idx,same_compartment] = True
                 else:
                     reactions.loc[idx,same_compartment] = False
-    print(reactions)                
+    #print(reactions)                
                 
     reactions.loc['CSm',deltag0] = -35.8057
     reactions.loc['ACONTm',deltag0] = 7.62962
@@ -435,7 +435,7 @@ def run(argv):
     nvar = nvariables[variable]
     
     metabolites.sort_values(by=variable, axis=0,ascending=False, inplace=True,)
-    print(metabolites)
+    #print(metabolites)
     
     
     #%%
@@ -443,7 +443,7 @@ def run(argv):
     nvar = nvariables[variable]
     
     metabolites.sort_values(by=variable, axis=0,ascending=False, inplace=True,)
-    print(metabolites)
+    #print(metabolites)
     
     # ## Prepare model for optimization
     
@@ -490,6 +490,7 @@ def run(argv):
     
     conc_type=conc
     if (use_experimental_data):
+        print("USING EXPERIMENTAL DATA")
         conc_type=conc_exp
     
     variable_concs = np.array(metabolites[conc_type].iloc[0:nvar].values, dtype=np.float64)
@@ -518,7 +519,7 @@ def run(argv):
     
     #r_log_counts = -10 + 10*np.random.rand(v_log_counts.size)
     #v_log_counts = r_log_counts
-    print('====== Without adjusting Keq_constant ======')
+    #print('====== Without adjusting Keq_constant ======')
     
     
     E_regulation = np.ones(Keq_constant.size) # THis is the vector of enzyme activities, Range: 0 to 1.
@@ -566,12 +567,7 @@ def run(argv):
 
      #%%
     
-    device = torch.device("cpu")
-    
-    
-    
-    
-    
+    #device = torch.device("cpu")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device)
 
@@ -632,13 +628,15 @@ def run(argv):
     epsilon_greedy_init = epsilon
     
     final_states=np.zeros(Keq_constant.size)
+    final_KQ_fs=np.zeros(Keq_constant.size)
+    final_KQ_rs=np.zeros(Keq_constant.size)
     epr_per_state=[]
     
     
 
     for update in range(0,updates):
         
-        x_changing = 10*torch.rand(1000, D_in, device=device)
+        x_changing = 1*torch.rand(1000, D_in, device=device)
     
         
         #generate state to use
@@ -654,7 +652,7 @@ def run(argv):
     
         prediction_x_changing_previous = nn_model(x_changing)
         #nn_model.train()
-        [sum_reward, average_loss,max_loss,final_epr,final_state, reached_terminal_state,\
+        [sum_reward, average_loss,max_loss,final_epr,final_state,final_KQ_f,final_KQ_r, reached_terminal_state,\
          random_steps_taken,nn_steps_taken] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon)
         
         print('random,nn steps')
@@ -662,6 +660,8 @@ def run(argv):
         print(nn_steps_taken)
         if (reached_terminal_state):
             final_states = np.vstack((final_states,final_state))
+            final_KQ_fs = np.vstack((final_KQ_fs,final_KQ_f))
+            final_KQ_rs = np.vstack((final_KQ_rs,final_KQ_r))
             epr_per_state.append(final_epr)
             
         scheduler.step(average_loss)
@@ -780,7 +780,27 @@ def run(argv):
                 '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
                 '_use_experimental_metab_'+str(int(use_experimental_data))+
                 '_sim'+str(sim_number)+\
-                '.txt', final_states, fmt='%f')
+                '.txt', final_states, fmt='%f')    
+
+    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
+                'final_KQF_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+\
+                '.txt', final_KQ_fs, fmt='%f')   
+
+    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
+                'final_KQR_gamma9_n'+str(n_back_step)+'_k5_'+
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+\
+                '.txt', final_KQ_rs, fmt='%f')
 
     np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
                 'epr_per_state_gamma9_n'+str(n_back_step)+'_k5_'+
