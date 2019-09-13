@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Aug 29 08:27:55 2019
 
-@author: samuel_britton
-"""
+#Experimental data organism: E. coli 
+#http://www.ncbi.nlm.nih.gov/pubmed/19561621
+#Absolute metabolite concentrations and implied enzyme active site occupancy in Escherichia coli.
 
-#!/usr/bin/env python
-# coding: utf-8
-
+#http://dx.doi.org/10.1038/nchembio.2077
+#Metabolite concentrations, fluxes and free energies imply efficient enzyme usage
 
 import numpy as np
 import pandas as pd
