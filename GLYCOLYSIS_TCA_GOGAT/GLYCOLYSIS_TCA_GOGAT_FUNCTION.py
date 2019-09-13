@@ -17,7 +17,7 @@ import re
 import sys
 
 os.chdir("..")
-cwd = os.getcwd()
+cwd = os.getcwd() #current working directory is parent folder
 sys.path.insert(0, cwd+'/Basic_Functions')
 sys.path.insert(0, cwd+'/GLYCOLYSIS_TCA_GOGAT')
 sys.path.insert(0, cwd+'/Basic_Functions/equilibrator-api-v0.1.8/build/lib')
@@ -28,9 +28,20 @@ from scipy.optimize import least_squares
 import torch
 
 def run(argv): 
-
-    #default values
+    try:
+        os.makedirs(cwd+'/GLYCOLYSIS_TCA_GOGAT/data')
+    except FileExistsError:
+        # directory already exists
+        pass
+    try:
+        os.makedirs(cwd+'/GLYCOLYSIS_TCA_GOGAT/models_final_data')
+    except FileExistsError:
+        # directory already exists
+        pass
     
+    pd.set_option('display.max_columns', None,'display.max_rows', None)
+
+    ###Default Values
     #If no experimental data  is available, we can estimate using 'rule-of-thumb' data at 0.001
     use_experimental_data=False
     learning_rate=1e-8 #3rd
@@ -49,7 +60,6 @@ def run(argv):
     for i in range(total):
         print ("Argument # %d : %s" % (i, str(sys.argv[i])))
     
-
     sim_number=int(sys.argv[1])
     n_back_step=int(sys.argv[2])
     if (n_back_step < 1):
@@ -65,9 +75,6 @@ def run(argv):
         eps_threshold=float(sys.argv[6])
     if (total > 7):
         gamma=float(sys.argv[7])
-
-    
-    pd.set_option('display.max_columns', None,'display.max_rows', None)
     
     print("sim")
     print(sim_number)
@@ -85,6 +92,7 @@ def run(argv):
     print(gamma)
     
 
+    #Initial Values
     T = 298.15
     R = 8.314e-03
     RT = R*T
@@ -95,15 +103,6 @@ def run(argv):
     
     
     np.set_printoptions(suppress=True)#turn off printin
-    # In[3]:
-    
-    
-    #with open( cwd + '/GLYCOLYSIS_TCA_GOGAT/GLYCOLYSIS_TCA_GOGAT.dat', 'r') as f:
-    #  print(f.read())
-      
-    
-    # In[5]:
-    
     
     fdat = open(cwd + '/GLYCOLYSIS_TCA_GOGAT/GLYCOLYSIS_TCA_GOGAT.dat', 'r')
     
@@ -189,28 +188,18 @@ def run(argv):
         elif re.match('^#',line):
             continue
             
-    #    elif (re.match("^[N,P]REGULATION\s", line)):
-    #        reg = line
-    #        reactions.loc[rxn_name,regulation] = reg
     fdat.close()
     S_matrix.fillna(0,inplace=True)
     S_active = S_matrix[S_matrix[enzyme_level] > 0.0]
     active_reactions = reactions[reactions[enzyme_level] > 0.0]
     del S_active[enzyme_level]
-    # Delete any columns/metabolites that have all zeros in the S matrix:
     S_active = S_active.loc[:, (S_active != 0).any(axis=0)]
     np.shape(S_active.values)
-    #print(S_active.shape)
-    #print(S_active)
+
     reactions[full_rxn] = reactions[left] + ' = ' + reactions[right]
-    
-    
-    # In[6]:
-    
     
     if (1):   
         for idx in reactions.index:
-            #print(idx,flush=True)
             boltzmann_rxn_str = reactions.loc[idx,'Full Rxn']
             if re.search(':',boltzmann_rxn_str):
                 all_cmprts = re.findall(':\S+', boltzmann_rxn_str)
@@ -230,8 +219,6 @@ def run(argv):
                     reactions.loc[idx,same_compartment] = True
                 else:
                     reactions.loc[idx,same_compartment] = False
-               
-    
     
     # ## Calculate Standard Free Energies of Reaction 
     reactions.loc['CSm',deltag0] = -35.1166
@@ -279,7 +266,6 @@ def run(argv):
     reactions.loc['GOGAT',deltag0_sigma] = 2.0508
 
     # ## Set Fixed Concentrations/Boundary Conditions
-    
     conc = 'Conc'
     variable = 'Variable'
     conc_exp = 'Conc_Experimental'
@@ -315,7 +301,6 @@ def run(argv):
     metabolites.loc['ACETYL-COA:MITOCHONDRIA',conc] = 6.06E-04
     metabolites.loc['ACETYL-COA:MITOCHONDRIA',variable] = True
     
-    
     metabolites.loc['COA:MITOCHONDRIA',conc] = 1.400000e-03
     metabolites.loc['COA:MITOCHONDRIA',variable] = False
     
@@ -326,7 +311,6 @@ def run(argv):
     metabolites.loc['H2O:MITOCHONDRIA',variable] = False
     metabolites.loc['H2O:CYTOSOL',conc] = 55.5
     metabolites.loc['H2O:CYTOSOL',variable] = False 
-    
     
     metabolites.loc['BETA-D-GLUCOSE:CYTOSOL',conc] = 2.000000e-03
     metabolites.loc['BETA-D-GLUCOSE:CYTOSOL',variable] = False 
@@ -379,8 +363,7 @@ def run(argv):
     
     # Make sure all the indices and columns are in the correct order:
     active_reactions = reactions[reactions[enzyme_level] > 0.0]
-    #display(reactions)
-    #display(metabolites.index)
+
     Sactive_index = S_active.index
     
     active_reactions.reindex(index = Sactive_index, copy = False)
@@ -388,18 +371,12 @@ def run(argv):
     S_active['H2O:MITOCHONDRIA'] = 0
     S_active['H2O:CYTOSOL'] = 0
     
-    #####################################
-    #####################################
-    #THIS IS MAKING FLUX -> 0.0
     where_are_NaNs = np.isnan(S_active)
     S_active[where_are_NaNs] = 0
-    
-    #display(S_active[:])
     
     S_mat = S_active.values
     
     Keq_constant = np.exp(-active_reactions[deltag0].astype('float')/RT)
-    #display(Keq_constant)
     Keq_constant = Keq_constant.values
     
     P_mat = np.where(S_mat>0,S_mat,0)
@@ -431,15 +408,12 @@ def run(argv):
     target_v_log_counts = complete_target_log_counts[0:nvar]
     target_f_log_counts = complete_target_log_counts[nvar:]
     
-    #WARNING:::::::::::::::CHANGE BACK TO ZEROS
     delta_increment_for_small_concs = (10**-50)*np.zeros(metabolites[conc_type].values.size);
     
     variable_concs_begin = np.array(metabolites[conc_type].iloc[0:nvar].values, dtype=np.float64)
     
-    #%% Basic test
-    
+    #%% Basic test 
     v_log_counts = np.log(variable_concs_begin*Concentration2Count)
-   
     
     E_regulation = np.ones(Keq_constant.size) # THis is the vector of enzyme activities, Range: 0 to 1.
     nvar = v_log_counts.size
@@ -449,12 +423,7 @@ def run(argv):
     
     rxn_flux = max_entropy_functions.oddsDiff(res_lsq1.x, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation)
     
-
-    # In[ ]:
     begin_log_metabolites = np.append(res_lsq1.x,f_log_counts)
-    ##########################################
-    ##########################################
-    #####################TESTER###############
     
     E_regulation = np.ones(Keq_constant.size) # THis is the vector of enzyme activities, Range: 0 to 1.
     log_metabolites = np.append(res_lsq1.x,f_log_counts)
@@ -473,19 +442,19 @@ def run(argv):
     
     newE = max_entropy_functions.calc_reg_E_step(E_regulation,React_Choice, nvar, res_lsq1.x, f_log_counts, complete_target_log_counts, 
                            S_mat, A, rxn_flux,KQ_f)
-        
-        
-    
+       
     delta_S_metab = max_entropy_functions.calc_deltaS_metab(res_lsq1.x, target_v_log_counts);
     
     ipolicy = 7 #use ipolicy=1 or 4
     reaction_choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ_f, E_regulation, res_lsq1.x)                                                        
     
-    #device = torch.device("cpu")
+    #%% END Basic test
+    
+
+    #Machine learning
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', device)
 
-    
     #set variables in ML program
     me.device=device
     me.v_log_counts_static = v_log_counts_stationary
@@ -508,9 +477,7 @@ def run(argv):
     #%%
     N, D_in, H, D_out = 1, Keq_constant.size,  50*Keq_constant.size, 1
 
-    # Create random Tensors to hold inputs and outputs
-    x = torch.rand(1000, D_in, device=device)
-
+    #create neural network
     nn_model = torch.nn.Sequential(
             torch.nn.Linear(D_in, H),
             torch.nn.Tanh(),
@@ -524,11 +491,7 @@ def run(argv):
     #optimizer = torch.optim.Adam(nn_model.parameters(), lr=3e-4)
     
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-5)
-    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-4)
-    
-    #%% SGD UPDATE TEST
 
-     #attempted iterations to update theta_linear
     v_log_counts = v_log_counts_stationary.copy()
     episodic_loss = []
     episodic_loss_max = []
@@ -593,11 +556,6 @@ def run(argv):
         print("TOTALPREDICTION")
         print(total_prediction_changing_diff)
         
-        #print(list(nn_model.parameters()))
-        #print("**********************************************************************")
-        #print("EPISODE FINISHED")
-        #print("sum")
-        #print(sum_reward)
         episodic_epr.append(final_epr)
         
         episodic_loss.append(average_loss)
