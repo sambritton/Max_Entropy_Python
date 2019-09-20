@@ -52,8 +52,9 @@ import multiprocessing as mp
 from multiprocessing import Pool
 import torch
 
-Method1 = 'lm'
-Method2 = 'dogbox'
+
+Method1 = 'dogbox'
+Method2 = 'lm'
 Method3 = 'trf'
 
 #Physically this is trying to minimizing the free energy change in each reaction. 
@@ -161,7 +162,9 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     states_matrix[:,0] = state_sample
     
     
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method1,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
+    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method1,
+                            bounds=(-500,500),xtol=1e-15, 
+                            args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
     if (res_lsq.success==False):
         res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
         if (res_lsq.success==False):
@@ -338,7 +341,9 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         
     rxn_choices = [i for i in range(num_rxns)]
     
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method1,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
+    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method1,
+                            bounds=(-500,500),xtol=1e-15, 
+                            args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
     if (res_lsq.success==False):
         res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
         if (res_lsq.success==False):
@@ -392,7 +397,9 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         trial_state_sample[React_Choice] = newE
         states_matrix[:,act]=trial_state_sample.copy()
         #re-optimize
-        new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method1,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
+        new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method1,
+                                    bounds=(-500,500),xtol=1e-15, 
+                                    args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
         if (res_lsq.success==False):
             new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
             if (res_lsq.success==False):

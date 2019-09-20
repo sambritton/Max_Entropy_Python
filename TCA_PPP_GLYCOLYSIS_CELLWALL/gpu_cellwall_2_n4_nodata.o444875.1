@@ -1,0 +1,122 @@
+Loading python/3.7.3
+  Loading requirement: tcl/8.6.8 gcc/8.3.0
+Loading pytorch/1.1.0
+  Loading requirement: cuda/10.0 cudnn/7.4
+/afs/crc.nd.edu/user/s/sbritto2/ml/Max_Entropy_Python/Basic_Functions/max_entropy_functions.py:93: RuntimeWarning: overflow encountered in exp
+  EKQ = np.exp(log_EKQ)
+['./TCA_PPP_GLYCOLYSIS_CELLWALL_FUNCTION.py', '2', '4', '0']
+./TCA_PPP_GLYCOLYSIS_CELLWALL_FUNCTION.py 2 4 0
+The total numbers of args passed to the script: 4 
+Args list: ['./TCA_PPP_GLYCOLYSIS_CELLWALL_FUNCTION.py', '2', '4', '0'] 
+Script name: ./TCA_PPP_GLYCOLYSIS_CELLWALL_FUNCTION.py
+Argument # 0 : ./TCA_PPP_GLYCOLYSIS_CELLWALL_FUNCTION.py
+Argument # 1 : 2
+Argument # 2 : 4
+Argument # 3 : 0
+sim
+2
+n_back_step
+4
+using experimental metabolite data
+False
+learning_rate
+1e-08
+epsilon
+0.5
+eps_threshold
+25
+gamma
+0.9
+Using device: cuda
+**************************************Path Length ds<0******************************************
+419
+Final STATE
+[1.         0.4096     0.4096     0.4096     0.13421773 0.2097152
+ 0.4096     0.4096     0.00040565 0.512      0.08589935 0.2097152
+ 0.262144   0.2097152  0.         0.00000299 0.4096     0.01152922
+ 0.512      1.         0.00193428 0.10737418 0.512      0.8
+ 0.4096     0.4096     0.262144   0.2097152  0.16777216 0.262144
+ 0.8        1.         1.         1.         1.         0.8
+ 0.4096     1.         1.         1.         0.262144   1.
+ 1.         0.16777216 0.4096     0.32768    0.05497558 0.06871948]
+[ 4.78721771  0.          0.          0.         -0.          0.
+  0.          0.          4.78721771  4.78721771  1.94881655  0.54408429
+  4.78721771  4.78721771  4.78721771  3.81713012  1.14837628  0.54408429
+  4.78721771  4.78721771  2.66875385  2.66875385  2.66875385  1.77916923
+  0.88958462  0.88958462 -0.51514764  1.40473226  1.40473226  0.88958462
+  4.78721771  4.78721771  4.78721771  4.78721771  4.78721771 32.16878344
+ 32.16878344 32.16878344  4.78721771  4.78721771 -0.0328122   0.0328122
+  0.02270214 -0.02270214  0.         35.97727219 35.97727219  3.80848874]
+original epr
+4.111137059727276
+index of max error on path
+418
+random,nn steps
+203
+216
+TOTAL REWARD
+30.673493913435983
+ave loss
+0.17585705825281028
+max_loss
+3.853628158569336
+<bound method Optimizer.state_dict of SGD (
+Parameter Group 0
+    dampening: 0
+    lr: 1e-08
+    momentum: 0.9
+    nesterov: False
+    weight_decay: 0
+)>
+{'factor': 0.1, 'min_lrs': [1e-10], 'patience': 100, 'verbose': True, 'cooldown': 10, 'cooldown_counter': 0, 'mode': 'min', 'threshold': 1e-05, 'threshold_mode': 'rel', 'best': 0.17585705825281028, 'num_bad_epochs': 0, 'mode_worse': inf, 'eps': 1e-08, 'last_epoch': 0}
+TOTALPREDICTION
+tensor([8.8924], device='cuda:0', grad_fn=<AddBackward0>)
+**************************************Path Length ds<0******************************************
+417
+Final STATE
+[1.         0.16777216 0.2097152  0.13421773 0.16777216 0.32768
+ 0.32768    0.262144   0.00050706 0.32768    0.2097152  0.4096
+ 0.00922337 0.512      0.00000003 0.00000374 0.512      0.022518
+ 0.64       0.8        0.00099035 0.16777216 0.512      0.4096
+ 0.262144   0.64       0.512      0.2097152  0.2097152  0.4096
+ 1.         1.         1.         1.         1.         0.512
+ 0.64       1.         1.         1.         0.64       1.
+ 1.         0.512      0.13421773 0.4096     0.06871948 0.03518437]
+[ 4.79361226  0.          0.         -0.          0.          0.
+ -0.          0.          4.79361226  4.79361226  2.01256435  0.70295919
+  4.79361226  4.79361226  4.79361226  4.34465045  2.03919979  0.70295919
+  4.79361226  4.79361226  2.30545066  2.30545066  2.30545066  1.53696711
+  0.76848355  0.76848355 -0.54112161  1.30960517  1.30960517  0.76848355
+  4.79361226  4.79361226  4.79361226  4.79361226  4.79361226 35.52656867
+ 35.52656867 35.52656867  4.79361226  4.79361226 -0.06163696  0.06163696
+  0.05349172 -0.05349172  0.         38.75657838 38.75657838  3.23000971]
+original epr
+4.143810770015216
+index of max error on path
+416
+random,nn steps
+198
+219
+TOTAL REWARD
+30.805728167350132
+ave loss
+0.17650329913023852
+max_loss
+3.9397099018096924
+<bound method Optimizer.state_dict of SGD (
+Parameter Group 0
+    dampening: 0
+    lr: 1e-08
+    momentum: 0.9
+    nesterov: False
+    weight_decay: 0
+)>
+{'factor': 0.1, 'min_lrs': [1e-10], 'patience': 100, 'verbose': True, 'cooldown': 10, 'cooldown_counter': 0, 'mode': 'min', 'threshold': 1e-05, 'threshold_mode': 'rel', 'best': 0.17585705825281028, 'num_bad_epochs': 1, 'mode_worse': inf, 'eps': 1e-08, 'last_epoch': 1}
+TOTALPREDICTION
+tensor([8.9652], device='cuda:0', grad_fn=<AddBackward0>)
+Traceback (most recent call last):
+  File "./TCA_PPP_GLYCOLYSIS_CELLWALL_FUNCTION.py", line 825, in <module>
+  File "./TCA_PPP_GLYCOLYSIS_CELLWALL_FUNCTION.py", line 710, in run
+  File "/afs/crc.nd.edu/x86_64_linux/p/pytorch/1.1.0/build/lib/python3.7/site-packages/numpy/lib/npyio.py", line 1359, in savetxt
+    open(fname, 'wt').close()
+TimeoutError: [Errno 110] Connection timed out: '/afs/crc.nd.edu/user/s/sbritto2/ml/Max_Entropy_Python/TCA_PPP_GLYCOLYSIS_CELLWALL/data/temp_episodic_loss_4_lr1e-08_25_eps0.5_2_penalty_reward_scalar_0.0_use_experimental_metab_0.txt'

@@ -50,8 +50,16 @@ def derivatives(log_vcounts,log_fcounts,mu0,S_mat, R_back_mat, P_mat, delta_incr
     EKQ_r = odds_alternate(E_Regulation,log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse, -1);#internal conversion to counts
     #deriv_prev = S_mat.T.dot((E_Regulation *(KQ_f - KQ_r)).T);
     
-    deriv = S_mat.T.dot((EKQ_f-EKQ_r).T)
+    s_mat = S_mat[:,0:nvar]
+    #deriv_alternate = S_mat.T.dot((EKQ_f - EKQ_r).T)
+    deriv = s_mat.T.dot((EKQ_f - EKQ_r).T)
+    #WARNING
     deriv = deriv[0:nvar]
+    
+    
+    #deriv = np.sign(deriv)*np.log(np.abs(deriv)/100 + 1.0)
+
+    #print(log_vcounts)
     return(deriv.reshape(deriv.size,))
 
 
@@ -63,7 +71,7 @@ def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_conc
     KQ = np.multiply(Keq_constant,Q_inv)
     
     return(KQ)
-
+    
 def odds_alternate(E_Regulation,log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, direction = 1):
     
     #counts = np.exp(log_counts) #convert to counts
@@ -83,7 +91,8 @@ def odds_alternate(E_Regulation,log_counts,mu0,S_mat, R_back_mat, P_mat, delta_i
     q_max = np.max(abs(log_Q_inv))
 
     ekq_max = np.max(abs(log_EKQ))
-
+    if ekq_max>100 or q_max > 100:
+        print(log_counts)
     if (q_max < ekq_max):
         Q_inv = np.exp(log_Q_inv)    
         KQ = np.multiply(Keq_constant,Q_inv)
@@ -92,6 +101,7 @@ def odds_alternate(E_Regulation,log_counts,mu0,S_mat, R_back_mat, P_mat, delta_i
         log_EKQ = np.log(np.multiply(E_Regulation,Keq_constant)) + log_Q_inv
         EKQ = np.exp(log_EKQ)
 
+    
     return(EKQ)
 
 def oddsDiff(log_vcounts, log_fcounts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, E_Regulation):
