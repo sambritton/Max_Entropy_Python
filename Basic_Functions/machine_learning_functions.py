@@ -344,9 +344,9 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method1,
                             bounds=(-500,500),xtol=1e-15, 
                             args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
-    if (res_lsq.success==False):
+    if (res_lsq.optimality>1e-05):
         res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
-        if (res_lsq.success==False):
+        if (res_lsq.optimality>1e-05):
             res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
     
 
@@ -400,9 +400,26 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method1,
                                     bounds=(-500,500),xtol=1e-15, 
                                     args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
-        if (res_lsq.success==False):
+        if (new_res_lsq.optimality>=1e-05):
+            
+            #then something is wrong. 
+            print("state")
+            print(state)
+            print("trial_state_sample")
+            print(trial_state_sample)
+            print("log_metabolites") 
+            print(log_metabolites)
+            print("current_reward_vec")
+            print(current_reward_vec)
+            print("state_value_vec")
+            print(state_value_vec)
+            print("KQ_f")
+            print(KQ_f)
+            print("KQ_r")
+            print(KQ_r)
+
             new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
-            if (res_lsq.success==False):
+            if (new_res_lsq.optimality>=1e-05):
                 new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, trial_state_sample))
         
         
@@ -431,7 +448,7 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         value_current_state = state_value(nn_model,  torch.from_numpy(trial_state_sample).float().to(device) )
         
         value_current_state=value_current_state.item()
-    
+
         
         current_reward = reward_value(new_v_log_counts, v_log_counts, \
                                       KQ_f_matrix[:,act], KQ_r_matrix[:,act],\
@@ -452,10 +469,26 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         current_reward_vec[act] = current_reward #Should have smaller EPR
         #print(current_reward)
         #USE PENALTY REWARDS
-
     
+
     #randomly choose one of the top choices if there is a tie. 
     #flatnonzero chooses a True value of the action_value_vec equal to it's max entry
+    if (np.isnan(action_value_vec).any()):
+        print("state")
+        print(state)
+        print("trial_state_sample")
+        print(trial_state_sample)
+        print("log_metabolites") 
+        print(log_metabolites)
+        print("current_reward_vec")
+        print(current_reward_vec)
+        print("state_value_vec")
+        print(state_value_vec)
+        print("KQ_f")
+        print(KQ_f_matrix[:,:])
+        print("KQ_r")
+        print(KQ_r_matrix[:,:])
+    
     if ( len(np.flatnonzero(action_value_vec == action_value_vec.max())) ==0 ):
         print(action_value_vec)
         print(action_value_vec.max())
