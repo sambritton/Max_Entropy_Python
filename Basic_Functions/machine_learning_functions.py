@@ -134,7 +134,7 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
         #that must be taken into account. We therefore add the last reward_s to the EPR value. 
         
         epr_future = max_entropy_functions.entropy_production_rate(KQ_f_new, KQ_r_new, E_Regulation_new)
-        final_reward = (0.1) * epr_future + psi*reward_s 
+        final_reward = (1.0) * epr_future + psi*reward_s 
         
     return final_reward
 
@@ -311,7 +311,7 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
             
             optimizer.zero_grad()
 
-            loss = (loss_fn( value_tau, estimate_value)) #currently L1
+            loss = (loss_fn( value_tau, estimate_value)) #MSE
 
             loss.backward()
 
