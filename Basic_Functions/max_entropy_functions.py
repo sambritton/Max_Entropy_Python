@@ -93,8 +93,8 @@ def odds_alternate(E_Regulation,log_counts,mu0,S_mat, R_back_mat, P_mat, delta_i
     q_max = np.max(abs(log_Q_inv))
     
     ekq_max = np.max(abs(log_EKQ))
-    if ekq_max>100 or q_max > 100:
-        print(log_counts)
+    #if ekq_max>100 or q_max > 100:
+    #    print(log_counts)
     if (q_max < ekq_max):
         Q_inv = np.exp(log_Q_inv)    
         KQ = np.multiply(Keq_constant,Q_inv)

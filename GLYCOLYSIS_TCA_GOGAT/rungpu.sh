@@ -4,7 +4,7 @@
 #$ -q  gpu 	 # Specify queue
 #$ -l gpu_card=1
 #s -pe smp 4         #specifies threads??? maybe
-#$ -N  gpu_tca_glycolysis_1_n4_nodata	 # Specify job name
+#$ -N  gpu_tca_glycolysis_6_n10_nodata	 # Specify job name
 #$ -t 1       #specify number of data input files
 
 
@@ -12,4 +12,4 @@ module load python/3.7.3
 module load pytorch/1.1.0
 
 
-python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION.py 1 4 0	
+python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION.py 6 10 0 1e-6	

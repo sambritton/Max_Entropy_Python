@@ -454,6 +454,7 @@ def run(argv):
     print('Using device:', device)
 
     #set variables in ML program
+    me.cwd=cwd
     me.device=device
     me.v_log_counts_static = v_log_counts_stationary
     me.target_v_log_counts = target_v_log_counts
@@ -473,7 +474,7 @@ def run(argv):
     me.penalty_reward_scalar=penalty_reward_scalar
     
     #%%
-    N, D_in, H, D_out = 1, Keq_constant.size,  50*Keq_constant.size, 1
+    N, D_in, H, D_out = 1, Keq_constant.size,  Keq_constant.size, 1
 
     #create neural network
     nn_model = torch.nn.Sequential(
@@ -481,14 +482,15 @@ def run(argv):
             torch.nn.Tanh(),
             torch.nn.Linear(H,D_out)).to(device)
 
-    loss_fn = torch.nn.MSELoss(reduction='sum')
+    #loss_fn = torch.nn.MSELoss(reduction='sum')
+    loss_fn = torch.nn.L1Loss()
     #learning_rate=5e-6
     #optimizer = torch.optim.SGD(nn_model.parameters(), lr=learning_rate, momentum=0.9)
     optimizer = torch.optim.SGD(nn_model.parameters(), lr=learning_rate, momentum=0.9)
     
     #optimizer = torch.optim.Adam(nn_model.parameters(), lr=3e-4)
     
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=500, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-5)
 
     v_log_counts = v_log_counts_stationary.copy()
     episodic_loss = []
@@ -529,6 +531,12 @@ def run(argv):
         [sum_reward, average_loss,max_loss,final_epr,final_state,final_KQ_f,final_KQ_r, reached_terminal_state,\
          random_steps_taken,nn_steps_taken] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon)
         
+        print("MAXIMUM LAYER WEIGHTS")
+        for layer in nn_model.modules():
+            try:
+                print(torch.max(layer.weight))
+            except:
+                print("")
         print('random,nn steps')
         print(random_steps_taken)
         print(nn_steps_taken)

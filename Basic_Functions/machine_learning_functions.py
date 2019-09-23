@@ -14,6 +14,7 @@ Created on Mon Jul  8 13:48:04 2019
 
 
 #%% Variables to set before use
+cwd=[]
 v_log_counts_static=[]
 target_v_log_counts=[]
 complete_target_log_counts=[]
@@ -133,7 +134,7 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
         #that must be taken into account. We therefore add the last reward_s to the EPR value. 
         
         epr_future = max_entropy_functions.entropy_production_rate(KQ_f_new, KQ_r_new, E_Regulation_new)
-        final_reward = 1.0 * epr_future + psi*reward_s 
+        final_reward = (0.1) * epr_future + psi*reward_s 
         
     return final_reward
 
@@ -143,6 +144,8 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     #reset for each episode. policy will add
     random_steps_taken=0
     nn_steps_taken=0
+    maximum_predicted_value = 0
+    layer_weight = torch.zeros(1,device=device)
     
     final_state=[]
     final_KQ_f=[]
@@ -160,6 +163,7 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     v_log_counts_matrix = np.zeros(shape=(nvar, end_of_path+1))
     
     states_matrix[:,0] = state_sample
+    state_value_vec_NOT_USED = np.zeros(num_rxns)
     
     
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method1,
@@ -194,17 +198,19 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     #A_path = A_init.copy()
     
     for t in range(0,end_of_path):
-        #breakpoint()
-        if (t < end_of_path):
 
+        if (t < end_of_path):
             #This represents the choice from the current policy. 
             [React_Choice,reward_vec[t+1],\
             KQ_f_matrix[:,t+1], KQ_r_matrix[:,t+1],\
             v_log_counts_matrix[:,t+1],\
             states_matrix[:,t+1],\
             delta_S_metab_matrix[:,t+1],\
-            used_random_step] = policy_function(nn_model, states_matrix[:,t], v_log_counts_matrix[:,t], epsilon_greedy)#regulate each reaction.                
-            
+            used_random_step,
+            state_value_vec_NOT_USED] = policy_function(nn_model, states_matrix[:,t], v_log_counts_matrix[:,t], state_value_vec_NOT_USED, epsilon_greedy)#regulate each reaction.                
+            maximum_predicted_value_temp = np.max(state_value_vec_NOT_USED)
+            if (maximum_predicted_value_temp>maximum_predicted_value):
+                maximum_predicted_value =maximum_predicted_value_temp
             if (used_random_step):
                 random_steps_taken+=1
             else:
@@ -262,7 +268,10 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
         tau = t - n_back_step + 1
                 
         if (tau >=0):
-            #breakpoint()
+            
+
+            #THIS IS THE FORWARD
+
             estimate_value = torch.zeros(1, device=device)
 
             for i in range(tau + 1, min(tau + n_back_step, end_of_path)+1):    
@@ -272,39 +281,72 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
                 value_tau_n = state_value(nn_model, torch.from_numpy(states_matrix[:, tau + n_back_step]).float().to(device) )
                 
                 
-                if len(value_tau_n.shape) ==2:
-                    value_tau_n = value_tau_n[0]
-                elif len(value_tau_n.shape) ==3:
-                    value_tau_n = value_tau_n[0][0]
+                #if len(value_tau_n.shape) ==2:
+                #    value_tau_n = value_tau_n[0]
+                #elif len(value_tau_n.shape) ==3:
+                #    value_tau_n = value_tau_n[0][0]
                 
                 estimate_value += (gamma**(n_back_step)) * value_tau_n
             
             value_tau = state_value(nn_model, torch.from_numpy(states_matrix[:, tau]).float().to(device) )
-            if len(value_tau.shape) == 2:
-                value_tau = value_tau[0]
-            elif len(value_tau.shape) == 3:
-                value_tau = value_tau[0][0]
+            #if len(value_tau.shape) == 2:
+            #    value_tau = value_tau[0]
+            #elif len(value_tau.shape) == 3:
+            #    value_tau = value_tau[0][0]
             #nn_model.eval()
             
 
             if (value_tau.requires_grad == False):
-                breakpoint()
+                print('value tau broken')
             if (estimate_value.requires_grad == True):
                 estimate_value.detach_()
             
 
+            #THIS IS THE END OF FORWARD
             
             #WARNING
             #loss ordering should be input with requires_grad == True,
             #followed by target with requires_grad == False
             #breakpoint()
-            loss = torch.sqrt(loss_fn( value_tau, estimate_value)) #RMSE
             
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
 
+            loss = (loss_fn( value_tau, estimate_value)) #currently L1
+
+            loss.backward()
+
+            clipping_value = 1.0
+            #torch.nn.utils.clip_grad_value_(nn_model.parameters(), clipping_value)
+            torch.nn.utils.clip_grad_norm_(nn_model.parameters(), clipping_value)
+
+            optimizer.step()
+            for layer in nn_model.modules():
+                if hasattr(layer, 'weight'):
+                    if ((layer.weight != layer.weight).any()): #nan isn't equal to nan
+                        print("value_tau")
+                        print(value_tau)
+                        print("value_tau_n")
+                        print(value_tau_n)
+                        print("estimate_value")
+                        print(estimate_value)
+                        print("loss")
+                        print(loss)
+                        print("maximum_predicted_value")
+                        print(maximum_predicted_value)
+                        for i in range(0, min(tau + n_back_step, end_of_path)+1):    
+                            print("reward_vec[i]")
+                            print(reward_vec[i])
+                        
+                        print("previous maximum layer_weight")
+                        print(layer_weight)
+
+                    #reset layer weighs
+                    layer_weight_temp = torch.max(layer.weight)
+                    if (layer_weight < layer_weight_temp):
+                        layer_weight = layer_weight_temp
+
+
+                    
             average_loss.append(loss.item())
             
 
@@ -316,6 +358,8 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     #print(average_loss)
     print("index of max error on path")
     print(average_loss.index(max(average_loss)))
+    print("maximum_predicted_value")
+    print(maximum_predicted_value)
     return [sum_reward_episode, average_loss_episode,max(average_loss),final_reward, final_state, final_KQ_f,final_KQ_r,\
             reached_terminal_state, random_steps_taken,nn_steps_taken]
 
@@ -323,7 +367,7 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
 #%%
 #input state, return action
     
-def policy_function(nn_model, state, v_log_counts_path, *args ):
+def policy_function(nn_model, state, v_log_counts_path,state_value_vec_NOT_USED, *args ):
     #last input argument should be epsilon for use when using greedy-epsilon algorithm. 
     
     KQ_f_matrix = np.zeros(shape=(num_rxns, num_rxns))
@@ -456,9 +500,8 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
 
         if (current_reward == penalty_exclusion_reward):
             rxn_choices.remove(act)
-            #print(current_reward)
-        #best action is defined by the current chosen state and value 
-        #should it be the next state value after?
+
+
         action_value = current_reward + (gamma) * value_current_state #note, action is using old KQ values
         
         
@@ -470,26 +513,56 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         #print(current_reward)
         #USE PENALTY REWARDS
     
-
-    #randomly choose one of the top choices if there is a tie. 
-    #flatnonzero chooses a True value of the action_value_vec equal to it's max entry
     if (np.isnan(action_value_vec).any()):
-        print("state")
+        print("********************************************************************")
+        print("********************************************************************")
+        print("********************************************************************")
+        print("begining state")
         print(state)
-        print("trial_state_sample")
-        print(trial_state_sample)
+        
+
+        print("trial_states")
+        for s in range(0, num_rxns):
+            print(states_matrix[:,s])
+
         print("log_metabolites") 
         print(log_metabolites)
         print("current_reward_vec")
         print(current_reward_vec)
         print("state_value_vec")
         print(state_value_vec)
+
+        print("v_log_counts_matrix")
+        for s in range(0, num_rxns):
+            print(v_log_counts_matrix[:,s])
+        
         print("KQ_f")
-        print(KQ_f_matrix[:,:])
+        for s in range(0, num_rxns):
+            print(KQ_f_matrix[:,s])
+
         print("KQ_r")
-        print(KQ_r_matrix[:,:])
-    
+        for s in range(0, num_rxns):
+            print(KQ_r_matrix[:,s])
+
+        scale_to_one = np.log(range_of_activity_scale + (1**log_scale_activity))
+        print("scale_to_one")
+        print(scale_to_one)
+
+
+        for s in range(0,len(Keq_constant)):
+            x = torch.from_numpy(states_matrix[:,s]).float().to(device)
+            x_scaled = (1.0 / scale_to_one) * torch.log(1.0 + (x**log_scale_activity))
+            print("x_scaled")
+            print(x_scaled)
+        
+        print("Previous state values")
+        print(state_value_vec_NOT_USED)
+        
+        torch.save(nn_model, cwd+'/GLYCOLYSIS_TCA_GOGAT/'+'model_temp_error'+str(np.random.uniform(0,1))+'_'+
+            '.pth')
+
     if ( len(np.flatnonzero(action_value_vec == action_value_vec.max())) ==0 ):
+        print("current action_value_vec")
         print(action_value_vec)
         print(action_value_vec.max())
         
@@ -556,11 +629,13 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         action_choice=-1
         #breakpoint()
     
+    state_value_vec_NOT_USED = state_value_vec.copy()
+
     return [action_choice,current_reward_vec[action_choice],\
             KQ_f_matrix[:,action_choice],KQ_r_matrix[:,action_choice],\
             v_log_counts_matrix[:,action_choice],\
             states_matrix[:,action_choice],\
-            delta_S_metab_matrix[:,action_choice],used_random_step]
+            delta_S_metab_matrix[:,action_choice],used_random_step,state_value_vec]
     
     
     
