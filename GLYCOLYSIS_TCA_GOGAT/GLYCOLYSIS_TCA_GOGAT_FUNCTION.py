@@ -474,7 +474,7 @@ def run(argv):
     me.penalty_reward_scalar=penalty_reward_scalar
     
     #%%
-    N, D_in, H, D_out = 1, Keq_constant.size,  Keq_constant.size, 1
+    N, D_in, H, D_out = 1, Keq_constant.size,  20*Keq_constant.size, 1
 
     #create neural network
     nn_model = torch.nn.Sequential(
@@ -591,13 +591,13 @@ def run(argv):
                     '.txt', episodic_epr, fmt='%f')
 
         np.savetxt(cwd+'/GLYCOLYSIS_TCA_GOGAT/data/'+
-                    'temp_episodic_random_step_'+str(n_back_step)+
+                    'temp_episodic_reward_'+str(n_back_step)+
                     '_lr'+str(learning_rate)+
                     '_'+str(eps_threshold)+
                     '_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+
                     '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
                     '_use_experimental_metab_'+str(int(use_experimental_data))+
-                    '.txt', episodic_random_step, fmt='%f')
+                    '.txt', episodic_reward, fmt='%f')
         
         if (update > 200):
             if ((max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025) and (update > 350)):
