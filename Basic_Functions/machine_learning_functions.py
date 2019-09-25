@@ -145,13 +145,9 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     
     final_reward=0
     sum_reward_episode = 0
-    end_of_path = 1000 #this is the maximum length a path can take
-    KQ_f_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
-    KQ_r_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
-    states_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
-    delta_S_metab_matrix = np.zeros(shape=(nvar, end_of_path+1))
-    v_log_counts_matrix = np.zeros(shape=(nvar, end_of_path+1))
-    
+    end_of_path = 10000 #this is the maximum length a path can take
+
+    states_matrix = np.zeros(shape=(num_rxns, end_of_path+1))    
     states_matrix[:,0] = state_sample
     
     
@@ -163,20 +159,16 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
         if (res_lsq.success==False):
             res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
     
-    v_log_counts_matrix[:,0] = res_lsq.x.copy()
-    #v_log_counts_matrix[:,0]=v_log_counts_static.copy()
-    log_metabolites = np.append(v_log_counts_matrix[:,0], f_log_counts)
+    v_log_counts_current = res_lsq.x.copy()
+    log_metabolites = np.append(v_log_counts_current, f_log_counts)
         
-    rxn_flux_init = max_entropy_functions.oddsDiff(v_log_counts_matrix[:,0], f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0])
-    KQ_f_matrix[:,0] = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant);
+    rxn_flux_init = max_entropy_functions.oddsDiff(v_log_counts_current, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0])
+    KQ_f_current = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant);
     
     Keq_inverse = np.power(Keq_constant,-1)
-    KQ_r_matrix[:,0] = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse,-1);
+    KQ_r_current = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse,-1);
     
-    #[RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts_matrix[:,0], f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f_matrix[:,0], KQ_r_matrix[:,0], states_matrix[:,0])
-    #A_init = max_entropy_functions.calc_A(v_log_counts_matrix[:,0], f_log_counts, S_mat, Jac, states_matrix[:,0] )
-    
-    delta_S_metab_matrix[:,0] = max_entropy_functions.calc_deltaS_metab(v_log_counts_matrix[:,0], target_v_log_counts);
+    delta_S_metab_current = max_entropy_functions.calc_deltaS_metab(v_log_counts_current, target_v_log_counts);
         
     #[ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A_init, S_mat, rxn_flux_init, RR)
           
@@ -191,11 +183,11 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
         if (t < end_of_path):
             #This represents the choice from the current policy. 
             [React_Choice,reward_vec[t+1],\
-            KQ_f_matrix[:,t+1], KQ_r_matrix[:,t+1],\
-            v_log_counts_matrix[:,t+1],\
+            KQ_f_current, KQ_r_current,\
+            v_log_counts_current,\
             states_matrix[:,t+1],\
-            delta_S_metab_matrix[:,t+1],\
-            used_random_step] = policy_function(nn_model, states_matrix[:,t], v_log_counts_matrix[:,t], epsilon_greedy)#regulate each reaction.                
+            delta_S_metab_current,\
+            used_random_step] = policy_function(nn_model, states_matrix[:,t], v_log_counts_current, epsilon_greedy)#regulate each reaction.                
             
             if (used_random_step):
                 random_steps_taken+=1
@@ -203,28 +195,22 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
                 nn_steps_taken+=1
                     
             if (React_Choice==-1):
+                print("out of rewards, final state")
+                print(states_matrix[:,t+1])
                 break
 
-            rxn_flux_path = max_entropy_functions.oddsDiff(v_log_counts_matrix[:,t+1], f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,t+1])
-            
-
-            epr_path = max_entropy_functions.entropy_production_rate(KQ_f_matrix[:,t+1], KQ_r_matrix[:,t+1], states_matrix[:,t+1])
-            
-
-            sum_reward_episode += reward_vec[t+1]
-
-            #last_state = states_matrix[:,t]
-            current_state = states_matrix[:,t+1].copy()
-            
+            rxn_flux_path = max_entropy_functions.oddsDiff(v_log_counts_current, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,t+1])
+            epr_path = max_entropy_functions.entropy_production_rate(KQ_f_current, KQ_r_current, states_matrix[:,t+1])
+            sum_reward_episode += reward_vec[t+1]            
 
             #We stop the path if we have no more positive loss function values, or if we revisit a state. 
-            if ((delta_S_metab_matrix[:,t+1]<=0.0).all()):
+            if ((delta_S_metab_current<=0.0).all()):
                 end_of_path=t+1 #stops simulation at step t+1
                 
                 reached_terminal_state = True
                 final_state=states_matrix[:,t+1].copy()
-                final_KQ_f=KQ_f_matrix[:,t+1].copy()
-                final_KQ_r=KQ_r_matrix[:,t+1].copy()
+                final_KQ_f=KQ_f_current.copy()
+                final_KQ_r=KQ_r_current.copy()
                 final_reward=epr_path
                 print("**************************************Path Length ds<0******************************************")
                 print(end_of_path)
@@ -233,31 +219,13 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
                 print(rxn_flux_path)
                 print("original epr")
                 print(epr_path)
-                
-                
 
-# =============================================================================
-#             for state in range(0,t+1):
-#                 last_state = states_matrix[:,state].copy()
-#                 if ((current_state==last_state).all()):
-#                     end_of_path=t+1
-#                     
-#                     print("**************************************Path Length******************************************")
-#                     print(end_of_path)
-#                     print("Final STATE")
-#                     print(states_matrix[:,state])
-#                     print(rxn_flux_path)
-#                     print(epr_path)
-# =============================================================================
-
-        ##BEGIN LEARNING
         tau = t - n_back_step + 1
                 
         if (tau >=0):
             
 
             #THIS IS THE FORWARD
-
             estimate_value = torch.zeros(1, device=device)
 
             for i in range(tau + 1, min(tau + n_back_step, end_of_path)+1):    
@@ -266,34 +234,20 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
             if ((tau + n_back_step) < end_of_path):
                 value_tau_n = state_value(nn_model, torch.from_numpy(states_matrix[:, tau + n_back_step]).float().to(device) )
                 
-                
-                #if len(value_tau_n.shape) ==2:
-                #    value_tau_n = value_tau_n[0]
-                #elif len(value_tau_n.shape) ==3:
-                #    value_tau_n = value_tau_n[0][0]
-                
                 estimate_value += (gamma**(n_back_step)) * value_tau_n
             
             value_tau = state_value(nn_model, torch.from_numpy(states_matrix[:, tau]).float().to(device) )
-            #if len(value_tau.shape) == 2:
-            #    value_tau = value_tau[0]
-            #elif len(value_tau.shape) == 3:
-            #    value_tau = value_tau[0][0]
-            #nn_model.eval()
-            
+
 
             if (value_tau.requires_grad == False):
                 print('value tau broken')
             if (estimate_value.requires_grad == True):
                 estimate_value.detach_()
-            
-
             #THIS IS THE END OF FORWARD
             
             #WARNING
             #loss ordering should be input with requires_grad == True,
             #followed by target with requires_grad == False
-            #breakpoint()
             
             optimizer.zero_grad()
 
@@ -306,36 +260,9 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
             torch.nn.utils.clip_grad_norm_(nn_model.parameters(), clipping_value)
 
             optimizer.step()
-            for layer in nn_model.modules():
-                if hasattr(layer, 'weight'):
-                    if ((layer.weight != layer.weight).any()): #nan isn't equal to nan
-                        print("value_tau")
-                        print(value_tau)
-                        print("value_tau_n")
-                        print(value_tau_n)
-                        print("estimate_value")
-                        print(estimate_value)
-                        print("loss")
-                        print(loss)
-                        print("maximum_predicted_value")
-                        print(maximum_predicted_value)
-                        for i in range(0, min(tau + n_back_step, end_of_path)+1):    
-                            print("reward_vec[i]")
-                            print(reward_vec[i])
-                        
-                        print("previous maximum layer_weight")
-                        print(layer_weight)
-
-                    #reset layer weighs
-                    layer_weight_temp = torch.max(layer.weight)
-                    if (layer_weight < layer_weight_temp):
-                        layer_weight = layer_weight_temp
-
-
                     
             average_loss.append(loss.item())
             
-
         if (tau >= (end_of_path-1)):
             break
     
@@ -410,10 +337,6 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     #print("BEGIN ACTIONS")
     
     for act in range(0,num_rxns):
-        #print("v_log_counts")
-        #print(np.max(v_log_counts))
-        #print(np.min(v_log_counts))
-        #print("end:")
         React_Choice = act#regulate each reaction.
         
         old_E = state[act]
