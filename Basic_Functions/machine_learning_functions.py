@@ -79,12 +79,14 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
     #val_future = max_entropy_functions.calc_deltaS_metab(v_log_counts_future, target_v_log_counts)
     
     #https://www.xarg.org/2016/06/the-log-sum-exp-trick-in-machine-learning/
+    #log(sum(e^x_i))
 
     #here we use the mean for the scaling. The logic is as follows:
     #
     scale_old_max = np.max(v_log_counts_old - target_v_log_counts)
     scale_old_min = np.min(v_log_counts_old - target_v_log_counts)
     scale_old = (scale_old_max + scale_old_min)/2.0
+    
     
     e_val_old = np.exp(v_log_counts_old - target_v_log_counts - scale_old)
     e_val_old = scale_old + np.log(np.sum(e_val_old))
@@ -136,6 +138,14 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
         epr_future = max_entropy_functions.entropy_production_rate(KQ_f_new, KQ_r_new, E_Regulation_new)
         final_reward = (1.0) * epr_future + psi*reward_s 
         
+        
+    t_old = np.exp(v_log_counts_old - target_v_log_counts)
+    t_new = np.exp(v_log_counts_future - target_v_log_counts)
+    
+    t_old_t = np.sum(np.log(t_old))
+    t_new_t = np.sum(np.log(t_new))
+    reward_s_alt = t_old_t - t_new_t
+    breakpoint()
     return final_reward
 
 
