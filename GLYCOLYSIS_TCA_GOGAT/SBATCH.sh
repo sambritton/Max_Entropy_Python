@@ -14,5 +14,5 @@
 module purge
 module load python/anaconda3
 
-srun python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION.py $SLURM_ARRAY_TASK_ID 2 
+srun python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION.py $SLURM_ARRAY_TASK_ID 2 0 1e-06 
 
