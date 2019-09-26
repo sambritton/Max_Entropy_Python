@@ -584,6 +584,7 @@ def run(argv):
 
     
     #set variables in ML program
+    me.cwd = cwd
     me.device=device
     me.v_log_counts_static = v_log_counts_stationary
     me.target_v_log_counts = target_v_log_counts
@@ -604,7 +605,7 @@ def run(argv):
     
         
     #%%
-    N, D_in, H, D_out = 1, Keq_constant.size,  50*Keq_constant.size, 1
+    N, D_in, H, D_out = 1, Keq_constant.size,  25*Keq_constant.size, 1
 
     # Create random Tensors to hold inputs and outputs
     x = torch.rand(1000, D_in, device=device)
@@ -621,7 +622,7 @@ def run(argv):
     
     #optimizer = torch.optim.Adam(nn_model.parameters(), lr=3e-4)
     
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=500, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-5)
     #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-4)
     
     #%% SGD UPDATE TEST
@@ -720,13 +721,13 @@ def run(argv):
                     '.txt', episodic_epr, fmt='%f')
 
         np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+
-                    'temp_episodic_random_step_'+str(n_back_step)+
+                    'temp_episodic_reward_'+str(n_back_step)+
                     '_lr'+str(learning_rate)+
                     '_'+str(eps_threshold)+
                     '_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+
                     '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
                     '_use_experimental_metab_'+str(int(use_experimental_data))+
-                    '.txt', episodic_random_step, fmt='%f')
+                    '.txt', episodic_reward, fmt='%f')
         
         if (update > 200):
             if ((max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025) and (update > 350)):
