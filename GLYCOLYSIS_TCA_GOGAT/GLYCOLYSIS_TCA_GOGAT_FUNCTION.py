@@ -21,7 +21,7 @@ sys.path.insert(0, cwd+'/GLYCOLYSIS_TCA_GOGAT')
 sys.path.insert(0, cwd+'/Basic_Functions/equilibrator-api-v0.1.8/build/lib')
     
 import max_entropy_functions
-import machine_learning_functions as me
+import machine_learning_functions_test_par as me
 from scipy.optimize import least_squares
 import torch
 
