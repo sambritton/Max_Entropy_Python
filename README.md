@@ -28,3 +28,7 @@ Additional Arguments:
 5: epsilon greedy init (0-1) default 0.5
 6: epsilon threshold (episodes before eps=eps/2) default 25
 7: gamma (0-1) default 0.9 
+
+
+To run a short simulation, cd to the GLYCOLYSIS_TCA_GOGAT folder. Use the command:
+python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION 1 4 0 1e-06 0.1 10 
