@@ -31,4 +31,4 @@ Additional Arguments:
 
 
 To run a short simulation, cd to the GLYCOLYSIS_TCA_GOGAT folder. Use the command:
-python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION 1 4 0 1e-06 0.1 10 
+python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION 1 4 0 1e-06 0.05 2 
