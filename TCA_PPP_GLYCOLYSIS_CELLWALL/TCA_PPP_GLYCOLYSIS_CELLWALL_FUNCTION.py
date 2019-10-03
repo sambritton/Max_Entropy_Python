@@ -23,7 +23,7 @@ sys.path.insert(0, cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL')
 sys.path.insert(0, cwd+'/Basic_Functions/equilibrator-api-v0.1.8/build/lib')
     
 import max_entropy_functions
-import machine_learning_functions as me
+import machine_learning_functions_test_par as me
 from scipy.optimize import least_squares
 import torch
 
@@ -584,7 +584,6 @@ def run(argv):
 
     
     #set variables in ML program
-    me.cwd = cwd
     me.device=device
     me.v_log_counts_static = v_log_counts_stationary
     me.target_v_log_counts = target_v_log_counts
@@ -605,7 +604,7 @@ def run(argv):
     
         
     #%%
-    N, D_in, H, D_out = 1, Keq_constant.size,  25*Keq_constant.size, 1
+    N, D_in, H, D_out = 1, Keq_constant.size,  20*Keq_constant.size, 1
 
     # Create random Tensors to hold inputs and outputs
     x = torch.rand(1000, D_in, device=device)
@@ -622,7 +621,7 @@ def run(argv):
     
     #optimizer = torch.optim.Adam(nn_model.parameters(), lr=3e-4)
     
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=500, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=200, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-5)
     #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=100, verbose=True, min_lr=1e-10,cooldown=10,threshold=1e-4)
     
     #%% SGD UPDATE TEST
@@ -667,6 +666,12 @@ def run(argv):
         [sum_reward, average_loss,max_loss,final_epr,final_state,final_KQ_f,final_KQ_r, reached_terminal_state,\
          random_steps_taken,nn_steps_taken] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon)
         
+        print("MAXIMUM LAYER WEIGHTS")
+        for layer in nn_model.modules():
+            try:
+                print(torch.max(layer.weight))
+            except:
+                print("")
         print('random,nn steps')
         print(random_steps_taken)
         print(nn_steps_taken)
@@ -721,13 +726,13 @@ def run(argv):
                     '.txt', episodic_epr, fmt='%f')
 
         np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+
-                    'temp_episodic_reward_'+str(n_back_step)+
+                    'temp_episodic_random_step_'+str(n_back_step)+
                     '_lr'+str(learning_rate)+
                     '_'+str(eps_threshold)+
                     '_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+
                     '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
                     '_use_experimental_metab_'+str(int(use_experimental_data))+
-                    '.txt', episodic_reward, fmt='%f')
+                    '.txt', episodic_random_step, fmt='%f')
         
         if (update > 200):
             if ((max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025) and (update > 350)):
