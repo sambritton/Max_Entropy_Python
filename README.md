@@ -30,5 +30,6 @@ Additional Arguments:
 7: gamma (0-1) default 0.9 
 
 
-To run a short simulation, cd to the GLYCOLYSIS_TCA_GOGAT folder. Use the command:
+To run a short simulation, cd to the GLYCOLYSIS_TCA_GOGAT folder. Use the command in one of the batch scripts:
 python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION 1 4 0 1e-06 0.05 2 
+
