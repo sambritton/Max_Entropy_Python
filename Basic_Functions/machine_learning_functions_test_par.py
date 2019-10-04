@@ -54,8 +54,8 @@ from itertools import repeat
 import torch
 
 
-Method1 = 'dogbox'
-Method2 = 'lm'
+Method2 = 'dogbox'
+Method1 = 'lm'
 Method3 = 'trf'
 
 #Physically this is trying to minimizing the free energy change in each reaction. 
@@ -164,11 +164,14 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     
     
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method1,
-                            bounds=(-500,500),xtol=1e-15, 
+                            xtol=1e-15, 
                             args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
     if (res_lsq.success==False):
-        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
+        print("USING DOGBOX")
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method2,
+            bounds=(-500,500),xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
         if (res_lsq.success==False):
+            print("USING 3rd METHOD")
             res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
     
     v_log_counts_matrix[:,0] = res_lsq.x.copy()
@@ -342,9 +345,20 @@ def potential_step(index, other_args):
     trial_state_sample[React_Choice] = newE
         #re-optimize
     new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method1,
-                                bounds=(-500,500),xtol=1e-15, 
+                                xtol=1e-15, 
                                 args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
                                       delta_increment_for_small_concs, Keq_constant, trial_state_sample))
+    if (new_res_lsq.success==False):
+        print("USING DOGBOX")
+        new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method2,
+            bounds=(-500,500), xtol=1e-15, 
+            args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
+            delta_increment_for_small_concs, Keq_constant, trial_state_sample))
+        if (new_res_lsq.success==False):
+            new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method3,xtol=1e-15, 
+            args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
+            delta_increment_for_small_concs, Keq_constant, trial_state_sample))
+    
 
     new_v_log_counts = new_res_lsq.x
 
@@ -377,22 +391,23 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     if (nargin == 1):
         epsilon_greedy = varargin[0]
         
+    used_random_step=False
     rxn_choices = [i for i in range(num_rxns)]
     
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method1,
-                            bounds=(-500,500),xtol=1e-15, 
+                            xtol=1e-15, 
                             args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
-    if (res_lsq.optimality>1e-05):
-        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method2,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
-        if (res_lsq.optimality>1e-05):
+    if (res_lsq.success==False):
+        print("USING DOGBOX")
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method2,
+            bounds=(-500,500),xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
+        if (res_lsq.success==False):
             res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
     
 
     #v_log_counts = v_log_counts_path.copy()
     v_log_counts = res_lsq.x
-    
-    if (np.sum(np.abs(v_log_counts - v_log_counts_path)) > 0.001):
-        print("ERROR IN POLICY V_COUNT OPTIMIZATION")
+         
     log_metabolites = np.append(v_log_counts, f_log_counts)
         
     rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state)
@@ -412,9 +427,6 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     
     indices = [i for i in range(0,len(Keq_constant))]
     action_value_vec = np.zeros(num_rxns)
-    state_value_vec = np.zeros(num_rxns)
-    E_test_vec = np.zeros(num_rxns)
-    old_E_test_vec = np.zeros(num_rxns)
     current_reward_vec = np.zeros(num_rxns)
 
     variables=[nn_model,state, nvar, v_log_counts, f_log_counts,\
@@ -437,37 +449,59 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
             rxn_choices.remove(act)
         action_value_vec[act] = async_result[act][0]
         current_reward_vec[act] = async_result[act][1]
-    
-    action_choice_index = np.random.choice(np.flatnonzero(action_value_vec[rxn_choices] == action_value_vec[rxn_choices].max()))
-    action_choice = rxn_choices[action_choice_index]
 
-
-    arr_choice_index = np.flatnonzero(action_value_vec[rxn_choices] == action_value_vec[rxn_choices].max())
-    arr_choice=np.asarray(rxn_choices)[arr_choice_index]
-    
-    arr_choice_reg = np.flatnonzero(state[arr_choice]<1)
-    if (arr_choice_reg.size>1):
-        print('using tie breaker')
-        print(arr_choice[arr_choice_reg])
-        action_choice = np.random.choice(arr_choice[arr_choice_reg])
-    
-
-
-    used_random_step=False
-    unif_rand = np.random.uniform(0,1)
-    if ( (unif_rand < epsilon_greedy) and (len(rxn_choices) > 0)):
-        #if (len(rxn_choices)>1):
-        #    rxn_choices.remove(action_choice)
-        #print("USING EPSILON GREEDY")
-        #print(action_choice)       
-        used_random_step=True
-        random_choice = random.choice(rxn_choices)
-        action_choice = random_choice
-        used_random_step=1
-
-    if (current_reward_vec == penalty_exclusion_reward).all():
+    if (len(rxn_choices) == 0):
         print("OUT OF REWARDS")
         action_choice=-1
+    else:
+        action_choice_index = np.random.choice(np.flatnonzero(action_value_vec[rxn_choices] == action_value_vec[rxn_choices].max()))
+        action_choice = rxn_choices[action_choice_index]
+
+        #try taking out random choice
+        #arr_choice_index = np.flatnonzero(action_value_vec[rxn_choices] == action_value_vec[rxn_choices].max())
+        #arr_choice=np.asarray(rxn_choices)[arr_choice_index]
+        
+        #arr_choice_reg = np.flatnonzero(state[arr_choice]<1)
+        #if (arr_choice_reg.size>1):
+        #    print('using tie breaker')
+        #    print(arr_choice[arr_choice_reg])
+        #    action_choice = np.random.choice(arr_choice[arr_choice_reg])
+        
+        
+        unif_rand = np.random.uniform(0,1)
+        if ( (unif_rand < epsilon_greedy) and (len(rxn_choices) > 0)):
+            #if (len(rxn_choices)>1):
+            #    rxn_choices.remove(action_choice)
+            #print("USING EPSILON GREEDY")
+            #print(action_choice)       
+            used_random_step=True
+            random_choice = random.choice(rxn_choices)
+            action_choice = random_choice
+            used_random_step=1
+
+    if (np.sum(np.abs(v_log_counts - v_log_counts_path)) > 0.1):
+        print("ERROR IN POLICY V_COUNT OPTIMIZATION")
+        #print("async_result")
+        #print(async_result)
+        print("state")
+        print(state)
+        print("v_log_counts")
+        print(v_log_counts)
+        print("v_log_counts_path")
+        print(v_log_counts_path)
+        print("current_reward_vec")
+        print(current_reward_vec)
+        print("action_value_vec")
+        print(action_value_vec)
+        print("rxn_choices")
+        print(rxn_choices)
+        print("MAXIMUM LAYER WEIGHTS")
+        for layer in nn_model.modules():
+            try:
+                print(torch.max(layer.weight))
+            except:
+                print("")
+
 
     #async_result order
     #[action_value, current_reward,KQ_f_new,KQ_r_new,new_v_log_counts,trial_state_sample,new_delta_S_metab]
