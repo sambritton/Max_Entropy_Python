@@ -1,4 +1,5 @@
 # Max_Entropy_Python
+WARNING, currently using machine_learning_functions_test_par.py
 
 This code compares two regulations methods for different pathways. 
 Each pathway is in a folder. The functions utilized are in Basic_Functions
