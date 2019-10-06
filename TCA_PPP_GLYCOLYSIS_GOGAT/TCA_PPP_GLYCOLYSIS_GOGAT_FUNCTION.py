@@ -567,6 +567,15 @@ def run(argv):
             final_KQ_fs = np.vstack((final_KQ_fs,final_KQ_f))
             final_KQ_rs = np.vstack((final_KQ_rs,final_KQ_r))
             epr_per_state.append(final_epr)
+                    
+            episodic_epr.append(final_epr)
+            
+            episodic_loss.append(average_loss)
+            
+            episodic_loss_max.append(max_loss)
+            episodic_reward.append(sum_reward)
+            episodic_nn_step.append(nn_steps_taken)
+            episodic_random_step.append(random_steps_taken)
             
         scheduler.step(average_loss)
         print("TOTAL REWARD")
@@ -584,14 +593,7 @@ def run(argv):
         print("TOTALPREDICTION")
         print(total_prediction_changing_diff)
         
-        episodic_epr.append(final_epr)
-        
-        episodic_loss.append(average_loss)
-        
-        episodic_loss_max.append(max_loss)
-        episodic_reward.append(sum_reward)
-        episodic_nn_step.append(nn_steps_taken)
-        episodic_random_step.append(random_steps_taken)
+
         np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_GOGAT/data/'+
                     'temp_episodic_loss_'+str(n_back_step) +
                     '_lr'+str(learning_rate)+
