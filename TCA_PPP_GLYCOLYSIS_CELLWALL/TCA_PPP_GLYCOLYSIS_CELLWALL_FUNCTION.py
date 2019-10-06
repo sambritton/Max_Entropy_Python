@@ -666,6 +666,8 @@ def run(argv):
         [sum_reward, average_loss,max_loss,final_epr,final_state,final_KQ_f,final_KQ_r, reached_terminal_state,\
          random_steps_taken,nn_steps_taken] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon)
         
+        print("EPISODE")
+        print(update)
         print("MAXIMUM LAYER WEIGHTS")
         for layer in nn_model.modules():
             try:
@@ -726,13 +728,13 @@ def run(argv):
                     '.txt', episodic_epr, fmt='%f')
 
         np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+
-                    'temp_episodic_random_step_'+str(n_back_step)+
+                    'temp_episodic_reward_'+str(n_back_step)+
                     '_lr'+str(learning_rate)+
                     '_'+str(eps_threshold)+
                     '_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+
                     '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
                     '_use_experimental_metab_'+str(int(use_experimental_data))+
-                    '.txt', episodic_random_step, fmt='%f')
+                    '.txt', episodic_reward, fmt='%f')
         
         if (update > 200):
             if ((max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025) and (update > 350)):
