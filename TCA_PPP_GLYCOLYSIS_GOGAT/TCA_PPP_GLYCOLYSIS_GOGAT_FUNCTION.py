@@ -43,7 +43,7 @@ def run(argv):
     #If no experimental data  is available, we can estimate using 'rule-of-thumb' data at 0.001
     use_experimental_data=False
     learning_rate=1e-8 #3rd
-    epsilon=0.5 #4th
+    epsilon=0.2 #4th
     eps_threshold=25 #5th
     gamma = 0.9 #6th
     updates = 500
@@ -615,13 +615,13 @@ def run(argv):
                     '.txt', episodic_epr, fmt='%f')
 
         np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_GOGAT/data/'+
-                    'temp_episodic_random_step_'+str(n_back_step)+
+                    'temp_episodic_reward_'+str(n_back_step)+
                     '_lr'+str(learning_rate)+
                     '_'+str(eps_threshold)+
                     '_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+
                     '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
                     '_use_experimental_metab_'+str(int(use_experimental_data))+
-                    '.txt', episodic_random_step, fmt='%f')
+                    '.txt', episodic_reward, fmt='%f')
         
         if (update > 200):
             if ((max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025) and (update > 350)):
