@@ -45,7 +45,7 @@ def run(argv):
     #If no experimental data  is available, we can estimate using 'rule-of-thumb' data at 0.001
     use_experimental_data=False
     learning_rate=1e-8 #3rd
-    epsilon=0.5 #4th
+    epsilon=0.1 #4th
     eps_threshold=25 #5th
     gamma = 0.9 #6th
     updates = 500
