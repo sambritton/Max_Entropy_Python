@@ -146,15 +146,15 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     random_steps_taken=0
     nn_steps_taken=0
     
-    final_state=[]
-    final_KQ_f=[]
-    final_KQ_r=[]
+    final_state=np.zeros(shape=(num_rxns,))
+    final_KQ_f=np.zeros(shape=(num_rxns,))
+    final_KQ_r=np.zeros(shape=(num_rxns,))
     reached_terminal_state=False
     average_loss=[]
     
     final_reward=0
     sum_reward_episode = 0
-    end_of_path = 1000 #this is the maximum length a path can take
+    end_of_path = 1500 #this is the maximum length a path can take
     KQ_f_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
     KQ_r_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
     states_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
@@ -165,7 +165,7 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     
     
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method1,
-                            xtol=1e-15, 
+                            xtol=1e-7, 
                             args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
     #if (res_lsq.success==False):
     #    print("USING DOGBOX")
@@ -354,7 +354,7 @@ def potential_step(index, other_args):
 
     start_cpu = time.time()
     new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method1,
-                                xtol=1e-15, 
+                                xtol=1e-7, 
                                 args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
                                       delta_increment_for_small_concs, Keq_constant, trial_state_sample))
     if (new_res_lsq.success==False):
@@ -397,6 +397,11 @@ def potential_step(index, other_args):
                                   KQ_f_new, KQ_r_new,\
                                   trial_state_sample, state)
 
+    if (new_res_lsq.success==False):
+        print("removing choice b/c failure to converge")
+        current_reward = penalty_exclusion_reward
+    
+    
     action_value = current_reward + (gamma) * value_current_state #note, action is using old KQ values
 
     return [action_value, current_reward,KQ_f_new,KQ_r_new,new_v_log_counts,trial_state_sample,new_delta_S_metab, end_cpu-start_cpu,end_nn-begin_nn,value_current_state]
@@ -414,7 +419,7 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     rxn_choices = [i for i in range(num_rxns)]
     
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method1,
-                            xtol=1e-15, 
+                            xtol=1e-7, 
                             args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
     if (res_lsq.success==False):
         print("Failed lm")
