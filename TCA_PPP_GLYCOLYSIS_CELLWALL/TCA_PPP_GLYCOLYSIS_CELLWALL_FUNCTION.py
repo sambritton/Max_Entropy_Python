@@ -15,7 +15,7 @@ import pandas as pd
 import os
 import re
 import sys
-
+np.set_printoptions(precision=20)
 os.chdir("..")
 cwd = os.getcwd() #current working directory is parent folder
 sys.path.insert(0, cwd+'/Basic_Functions')
@@ -45,7 +45,7 @@ def run(argv):
     #If no experimental data  is available, we can estimate using 'rule-of-thumb' data at 0.001
     use_experimental_data=False
     learning_rate=1e-8 #3rd
-    epsilon=0.1 #4th
+    epsilon=0.05 #4th
     eps_threshold=25 #5th
     gamma = 0.9 #6th
     updates = 500
@@ -642,7 +642,7 @@ def run(argv):
     final_KQ_fs=np.zeros(Keq_constant.size)
     final_KQ_rs=np.zeros(Keq_constant.size)
     epr_per_state=[]
-    
+    was_state_terminal=[]
     
 
     for update in range(0,updates):
@@ -678,19 +678,24 @@ def run(argv):
         print(random_steps_taken)
         print(nn_steps_taken)
         if (reached_terminal_state):
-            final_states = np.vstack((final_states,final_state))
-            final_KQ_fs = np.vstack((final_KQ_fs,final_KQ_f))
-            final_KQ_rs = np.vstack((final_KQ_rs,final_KQ_r))
-            epr_per_state.append(final_epr)
-                
-            episodic_epr.append(final_epr)
+            was_state_terminal.append(1)
+        else:
+            was_state_terminal.append(0)
+        
+
+        final_states = np.vstack((final_states,final_state))
+        final_KQ_fs = np.vstack((final_KQ_fs,final_KQ_f))
+        final_KQ_rs = np.vstack((final_KQ_rs,final_KQ_r))
+        epr_per_state.append(final_epr)
             
-            episodic_loss.append(average_loss)
-            
-            episodic_loss_max.append(max_loss)
-            episodic_reward.append(sum_reward)
-            episodic_nn_step.append(nn_steps_taken)
-            episodic_random_step.append(random_steps_taken)
+        episodic_epr.append(final_epr)
+        
+        episodic_loss.append(average_loss)
+        
+        episodic_loss_max.append(max_loss)
+        episodic_reward.append(sum_reward)
+        episodic_nn_step.append(nn_steps_taken)
+        episodic_random_step.append(random_steps_taken)
         scheduler.step(average_loss)
         print("TOTAL REWARD")
         print(sum_reward)
@@ -735,6 +740,15 @@ def run(argv):
                     '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
                     '_use_experimental_metab_'+str(int(use_experimental_data))+
                     '.txt', episodic_reward, fmt='%f')
+                    
+        np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/data/'+
+                    'temp_final_states_'+str(n_back_step)+
+                    '_lr'+str(learning_rate)+
+                    '_'+str(eps_threshold)+
+                    '_eps'+str(epsilon_greedy_init)+'_'+str(sim_number)+
+                    '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                    '_use_experimental_metab_'+str(int(use_experimental_data))+
+                    '.txt', final_states, fmt='%f')
         
         if (update > 200):
             if ((max(episodic_loss[-100:])-min(episodic_loss[-100:]) < 0.025) and (update > 350)):
@@ -756,7 +770,16 @@ def run(argv):
                 '_use_experimental_metab_' +str(int(use_experimental_data))+
                 '_sim'+str(sim_number) + '.pth')
     
-    
+    np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
+                'episodic_terminal_state_gamma9_n'+str(n_back_step)+'_k5_'
+                '_lr'+str(learning_rate)+
+                '_threshold'+str(eps_threshold)+
+                '_eps'+str(epsilon_greedy_init)+
+                '_penalty_reward_scalar_'+str(me.penalty_reward_scalar)+
+                '_use_experimental_metab_'+str(int(use_experimental_data))+
+                '_sim'+str(sim_number)+
+                '.txt', was_state_terminal, fmt='%f')
+
     np.savetxt(cwd+'/TCA_PPP_GLYCOLYSIS_CELLWALL/models_final_data/'+
                 'episodic_loss_gamma9_n'+str(n_back_step)+'_k5_'
                 '_lr'+str(learning_rate)+
