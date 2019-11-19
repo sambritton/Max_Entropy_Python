@@ -48,20 +48,12 @@ def derivatives(log_vcounts,log_fcounts,mu0,S_mat, R_back_mat, P_mat, delta_incr
     Keq_inverse = np.power(Keq,-1);
     #KQ_r = odds(log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse, -1);#internal conversion to counts
     EKQ_r = odds_alternate(E_Regulation,log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse, -1);#internal conversion to counts
-    #deriv_prev = S_mat.T.dot((E_Regulation *(KQ_f - KQ_r)).T);
     
     s_mat = S_mat[:,0:nvar]
     #deriv_alternate = S_mat.T.dot((EKQ_f - EKQ_r).T)
     deriv = s_mat.T.dot((EKQ_f - EKQ_r).T)
-    
-    #WARNING
-    deriv = deriv[0:nvar]
-    
-    
-    #deriv = np.sign(deriv)*np.log(np.abs(deriv)/100 + 1.0)
 
-    #print(log_vcounts)
-    #print(log_vcounts)
+ 
     return(deriv.reshape(deriv.size,))
 
 
@@ -139,6 +131,7 @@ def calc_Jac2(log_vcounts, log_fcounts, S_mat, delta_increment_for_small_concs, 
     
     return (RR, Jac)
 
+
 def calc_A(log_vcounts, log_fcounts, S_mat, Jac, E_Regulation):
 # A is the linear stability matrix where the Aij = df_i/dx_j * x_j
 # A is an N metabolite time-differential equations by (rows) by 
@@ -175,11 +168,11 @@ def conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR):
 
     return [ccc,fcc]
 
-def calc_deltaS(log_vcounts, log_fcounts, S_mat, KQ):
+def calc_deltaS(log_vcounts,target_log_vcounts, log_fcounts, S_mat, KQ):
     #vcounts = np.exp(log_vcounts)
     #fcounts = np.exp(log_fcounts)
     
-    target_log_vcounts = np.ones(len(log_vcounts)) * np.log(0.001*6.022140857e+23*1.0e-15)
+    #target_log_vcounts = #np.ones(len(log_vcounts)) * np.log(0.001*6.022140857e+23*1.0e-15)
     log_target_metabolite = np.append(target_log_vcounts, log_fcounts)
     log_metabolite = np.append(log_vcounts, log_fcounts)
     
@@ -223,19 +216,35 @@ def calc_deltaS_metab(v_log_counts, target_v_log_counts ):
     
     return delta_S_metab
 
-def get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ, E_regulation, v_counts):
+def get_enzyme2regulate(ipolicy, delta_S_metab,delta_S, ccc, KQ, E_regulation, v_counts):
     
     #comma makes np.where return array instead of list of array
     reaction_choice=-1
     
     #take positive and negative indices in metabolite errors
-    S_index = [i for i,_ in enumerate(E_regulation)]
-    sm_idx, = np.where(delta_S_metab > 0.0) #reactions that have bad values 
-
+    #S_index = [i for i,_ in enumerate(E_regulation)]
+    #sm_idx, = np.where(delta_S_metab > 0.0) #reactions that have bad values 
     
-    if ((sm_idx.size!=0 )):
+    
+    #This is actually a pretty important choice. If we use sm_idx for all variable metabolites
+    #we will take the sensitivity of those into account where they are lower than the prescribed 
+    #maximum. Shouldn't we therefore only use those where delta_S_metab is positive? i.e. the metabolites
+    #are out of caliber?
+    #when we use all of the metabolits, the agent only regulates hex1 for pathway 2 and 3. 
+    if (ipolicy==4):
+        sm_idx = [i for i,val in enumerate(delta_S_metab) if val > 0]
+        S_index = [i for i,val in enumerate(delta_S) if val > 0]
         
-        row_index = sm_idx.tolist()
+        #sm_idx = [i for i,val in enumerate(delta_S_metab)]
+        #S_index = [i for i,val in enumerate(delta_S)]
+    else:
+        sm_idx = [i for i,val in enumerate(delta_S_metab) if val > 0]
+        S_index = [i for i,val in enumerate(delta_S)]
+    #sm_idx = [i for i,val in enumerate(delta_S_metab)]
+    
+    if ((delta_S_metab>0 ).any()):
+        
+        row_index = sm_idx#sm_idx.tolist()
         col_index = S_index
         
     
@@ -280,7 +289,8 @@ def get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ, E_regulation, v_counts)
             #sum along rows (i.e. metabolites) to see which reaction is most sensitive
             index3 = np.argmax(np.sum(temp_x, axis=0))
             reaction_choice = S_index[index3]
-
+            #breakpoint()
+            
             return reaction_choice
         if (ipolicy == 7):
         
@@ -301,9 +311,9 @@ def get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ, E_regulation, v_counts)
             DeltaAlpha = 0.001; # must be small enough such that the arguement
                                 # of the log below is > 0
             DeltaDeltaS = -np.log(1 - DeltaAlpha*np.divide(dx,v_counts[sm_idx]))
-            
             index3 = np.argmax(np.sum(DeltaDeltaS, axis=1)) #sum along rows (i.e. metabolites)
             reaction_choice = S_index[index3]
+            #breakpoint()
             
             
             return reaction_choice
@@ -384,7 +394,7 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
         #display(idx)
         delta_E_Final = E_choices[idx]
         
-        newE = E - (delta_E_Final)
+        newE = E - E/2#(delta_E_Final)
         
         tolerance = 1.0e-07
         if ((newE < 0) or (newE > 1.0)):
