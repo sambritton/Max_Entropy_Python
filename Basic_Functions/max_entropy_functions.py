@@ -169,49 +169,57 @@ def conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR):
     return [ccc,fcc]
 
 def calc_deltaS(log_vcounts,target_log_vcounts, log_fcounts, S_mat, KQ):
-    #vcounts = np.exp(log_vcounts)
-    #fcounts = np.exp(log_fcounts)
     
-    #target_log_vcounts = #np.ones(len(log_vcounts)) * np.log(0.001*6.022140857e+23*1.0e-15)
+    pt_forward=np.zeros(len(KQ))
+    pt_reverse=np.zeros(len(KQ))
+    
     log_target_metabolite = np.append(target_log_vcounts, log_fcounts)
     log_metabolite = np.append(log_vcounts, log_fcounts)
     
-    #initialize delta_S
     delta_S = np.zeros(len(KQ))
-    #Populate with forward direciton 
-    row, = np.where(KQ >= 1);
+    delta_S_new = np.zeros(len(KQ))
+    row, = np.where(KQ >= 1)
     
     P_Forward = (S_mat[row,:] > 0)
-    PdotMetab_Forward = np.matmul(P_Forward, log_metabolite)
+    
+    
+    PdotMetab_Forward = np.matmul(P_Forward, log_metabolite) #takes rxn x metab mult metab x 1 = rxn x 1
+    
     PdotTargetMetab_Forward = np.matmul(P_Forward, log_target_metabolite)
+    
     delta_S[row] = PdotMetab_Forward - PdotTargetMetab_Forward
     
+    for rxn in range(0,P_Forward.shape[0]):
+        #print(rxn)
+        forward_val = np.max(np.multiply(P_Forward[rxn,:], log_metabolite))
+        forward_target = np.max(np.multiply(P_Forward[rxn,:], log_target_metabolite))
+        pt_forward[rxn] = forward_val - forward_target
+
+    delta_S_new[row] = pt_forward[row]
     
     #Now reverse direction
-    row, = np.where(KQ < 1);
+    row, = np.where(KQ < 1)
 
     P_Reverse = (S_mat[row,:] < 0)
     PdotMetab_Reverse = np.matmul(P_Reverse, log_metabolite)
     PdotTargetMetab_Reverse = np.matmul(P_Reverse, log_target_metabolite)
     delta_S[row] = PdotMetab_Reverse - PdotTargetMetab_Reverse
     
+    
+    for rxn in range(0,P_Reverse.shape[0]):
+        reverse_val = np.max(np.multiply(P_Reverse[rxn,:], log_metabolite))
+        reverse_target = np.max(np.multiply(P_Reverse[rxn,:], log_target_metabolite))
+
+        pt_reverse[rxn] = reverse_val - reverse_target
+    
+    
+    delta_S_new[row] = pt_reverse[row]
+    #breakpoint()
+    
     return delta_S
 
 def calc_deltaS_metab(v_log_counts, target_v_log_counts ):
-# =============================================================================
-#     varargin = args
-#     nargin = len(varargin)
-#     
-#     #initialize
-#     target_v_log_counts = np.ones(len(v_log_counts))
-#     if (nargin < 1):
-#         #target_v_log_counts = np.ones(len(v_log_counts)) * np.log(0.001*6.022140857e+23*1.0e-15);
-#         
-#         target_v_log_counts = np.ones(len(v_log_counts)) * np.log(6.022140900000000e+05);
-#     else:
-#         target_v_log_counts = varargin;
-# =============================================================================
-    
+
     delta_S_metab = v_log_counts - target_v_log_counts
     
     return delta_S_metab
@@ -232,9 +240,11 @@ def get_enzyme2regulate(ipolicy, delta_S_metab,delta_S, ccc, KQ, E_regulation, v
     #are out of caliber?
     #when we use all of the metabolits, the agent only regulates hex1 for pathway 2 and 3. 
     if (ipolicy==4):
-        sm_idx = [i for i,val in enumerate(delta_S_metab) if val > 0]
-        S_index = [i for i,val in enumerate(delta_S) if val > 0]
         
+        sm_idx = [i for i,val in enumerate(delta_S_metab) if val >= 0]
+        S_index = [i for i,val in enumerate(delta_S) if val >= 0]
+        print(S_index)
+        #breakpoint()
         #sm_idx = [i for i,val in enumerate(delta_S_metab)]
         #S_index = [i for i,val in enumerate(delta_S)]
     else:
@@ -242,7 +252,7 @@ def get_enzyme2regulate(ipolicy, delta_S_metab,delta_S, ccc, KQ, E_regulation, v
         S_index = [i for i,val in enumerate(delta_S)]
     #sm_idx = [i for i,val in enumerate(delta_S_metab)]
     
-    if ((delta_S_metab>0 ).any()):
+    if (len(S_index)>0 ):
         
         row_index = sm_idx#sm_idx.tolist()
         col_index = S_index
