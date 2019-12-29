@@ -160,7 +160,6 @@ display(S_active.shape)
 display(S_active)
 reactions[full_rxn] = reactions[left] + ' = ' + reactions[right]
 
-
 # In[6]:
 
 
@@ -299,8 +298,6 @@ reactions.loc['RPE',deltag0] = -3.37
 reactions.loc['RPI',deltag0] = -1.96367
 reactions.loc['TKT2',deltag0] = -10.0342
 reactions.loc['TALA',deltag0] = -0.729232
-#reactions.loc['FBA3',deltag0] = 13.9499
-#reactions.loc['PFK_3',deltag0] = -9.33337
 reactions.loc['TKT1',deltag0] = -3.79303
 reactions.loc['GOGAT',deltag0] = 48.1864
 
@@ -331,8 +328,6 @@ reactions.loc['RPE',deltag0_sigma] = 1.16485
 reactions.loc['RPI',deltag0_sigma] = 1.16321
 reactions.loc['TKT2',deltag0_sigma] = 2.08682
 reactions.loc['TALA',deltag0_sigma] = 1.62106
-#reactions.loc['FBA3',deltag0_sigma] = 7.36854
-#reactions.loc['PFK_3',deltag0_sigma] = 7.3671
 reactions.loc['TKT1',deltag0_sigma] = 2.16133
 reactions.loc['GOGAT',deltag0_sigma] = 2.0508
 
@@ -446,7 +441,6 @@ metabolites.loc['GLYCERONE_PHOSPHATE:CYTOSOL',conc_exp] = 3.060000e-03
 metabolites.loc['SUCCINATE:MITOCHONDRIA',conc_exp] = 5.69e-04
 metabolites.loc['D-RIBULOSE-5-PHOSPHATE:CYTOSOL',conc_exp] = 1.12e-04
 metabolites.loc['PHOSPHOENOLPYRUVATE:CYTOSOL',conc_exp] = 1.84e-04
-metabolites.loc['D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL',conc_exp] = 1.52e-02
 metabolites.loc['D-ERYTHROSE-4-PHOSPHATE:CYTOSOL',conc_exp] = 4.90e-05
 metabolites.loc['D-XYLULOSE-5-PHOSPHATE:CYTOSOL',conc_exp] = 1.810000e-04
 metabolites.loc['D-FRUCTOSE_6-PHOSPHATE:CYTOSOL',conc_exp] = 2.52e-03
@@ -455,8 +449,13 @@ metabolites.loc['D-RIBOSE-5-PHOSPHATE:CYTOSOL',conc_exp] = 7.8700e-04
 metabolites.loc['SEDOHEPTULOSE_7-PHOSPHATE:CYTOSOL',conc_exp] = 8.82e-04
 metabolites.loc['2-PHOSPHO-D-GLYCERATE:CYTOSOL',conc_exp] = 9.180e-05
 metabolites.loc['6-PHOSPHO-D-GLUCONATE:CYTOSOL',conc_exp] = 3.77e-03
-#metabolites.loc['SEDOHEPTULOSE_1,7-BISPHOSPHATE:CYTOSOL',conc_exp] = 1.000000e-03
 metabolites.loc['D-GLUCONO-1,5-LACTONE_6-PHOSPHATE:CYTOSOL',conc_exp] = 1.000000e-03
+
+
+
+metabolites.loc['D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL',conc_exp] = 1.52e-02 #old version
+#metabolites.loc['D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL',conc_exp] = 1.0e-08
+#metabolites.loc['D-FRUCTOSE_1,6-BISPHOSPHATE:CYTOSOL',variable] = False
 
 
 #%%
@@ -556,8 +555,139 @@ display(res_lsq1.x)
 display(res_lsq2.x)
 display("Reaction Flux")
 display(rxn_flux)
+#%%
+ #%%
+import torch
+device = torch.device("cpu")
+
+import machine_learning_functions
+import machine_learning_functions as me
 
 
+gamma = 0.9
+num_samples = 10 #number of state samples theta_linear attempts to fit to in a single iteration
+
+epsilon_greedy = 0.00
+
+#set variables in ML program
+me.device=device
+me.v_log_counts_static = v_log_counts_stationary
+me.target_v_log_counts = target_v_log_counts
+me.complete_target_log_counts = complete_target_log_counts
+me.Keq_constant = Keq_constant
+me.f_log_counts = f_log_counts
+
+me.P_mat = P_mat
+me.R_back_mat = R_back_mat
+me.S_mat = S_mat
+me.delta_increment_for_small_concs = delta_increment_for_small_concs
+me.nvar = nvar
+me.mu0 = mu0
+
+me.gamma = gamma
+me.num_rxns = Keq_constant.size
+
+
+#%%F1,6
+N, D_in, H, D_out = 1, Keq_constant.size,  4*Keq_constant.size, 1
+
+# Create random Tensors to hold inputs and outputs
+x_in = torch.zeros(N, D_in)
+y_in = torch.zeros(N, D_out)
+
+# Create random Tensors to hold inputs and outputs
+x = 10*torch.rand(1000, D_in)
+
+
+#works good enough
+# =============================================================================
+# nn_model = torch.nn.Sequential(
+#         torch.nn.Linear(D_in, H),
+#         torch.nn.Tanh(),
+#         torch.nn.Linear(H,D_out)) 
+# =============================================================================
+
+#works best with 10*keq as hidden layer, and divisor=5 for E_reg
+nn_model = torch.nn.Sequential(
+        torch.nn.Linear(D_in, H),
+        torch.nn.Tanh(),
+        torch.nn.Linear(H,D_out))
+
+loss_fn = torch.nn.MSELoss(reduction='sum')
+learning_rate=1e-4
+optimizer = torch.optim.SGD(nn_model.parameters(), lr=learning_rate, momentum=0.9)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=200, verbose=True, min_lr=1e-10,cooldown=10,threshold=5e-3)
+
+#%%
+
+updates = 250 #attempted iterations to update theta_linear
+v_log_counts = v_log_counts_stationary.copy()
+episodic_loss = []
+episodic_loss_max = []
+episodic_epr = []
+episodic_reward = []
+episodic_prediction = []
+episodic_prediction_changing = []
+
+episodic_nn_step = []
+episodic_random_step = []
+epsilon_greedy = 1.0
+epsilon_greedy_init=epsilon_greedy
+
+final_states=np.zeros(Keq_constant.size)
+epr_per_state=[]
+
+n_back_step = 8 #these steps use rewards. Total steps before n use state values
+threshold=20
+for update in range(0,updates):
+    
+    x_changing = 10*torch.rand(1000, D_in)
+
+    
+    #generate state to use
+    state_is_valid = False
+    state_sample = np.zeros(Keq_constant.size)
+    for sample in range(0,len(state_sample)):
+        state_sample[sample] = np.random.uniform(1,1)
+    
+    state_sample[17]=0.0
+    #annealing test
+    if ((update %threshold == 0) and (update != 0)):
+        epsilon_greedy=epsilon_greedy/2
+        print("RESET epsilon ANNEALING")
+        print(epsilon_greedy)
+
+    prediction_x_changing_previous = nn_model(x_changing)
+    #nn_model.train()
+    [sum_reward, average_loss,max_loss,final_epr,final_state,final_KQ_f,final_KQ_r,\
+     reached_terminal_state, random_steps_taken,nn_steps_taken] = me.sarsa_n(nn_model,loss_fn, optimizer, scheduler, state_sample, n_back_step, epsilon_greedy)
+    
+    breakpoint()
+    #return [sum_reward_episode, average_loss_episode,max(average_loss),final_reward, final_state, final_KQ_f,final_KQ_r,\
+    #        reached_terminal_state, random_steps_taken,nn_steps_taken]
+
+    print('random,nn steps')
+    print(random_steps_taken)
+    print(nn_steps_taken)
+    if (reached_terminal_state):
+        final_states = np.vstack((final_states,final_state))
+        epr_per_state.append(final_epr)
+        
+    scheduler.step(average_loss)
+    print("TOTAL REWARD")
+    print(sum_reward)
+    print("ave loss")
+    print(average_loss)
+    print("max_loss")
+    print(max_loss)
+    
+    print(optimizer.state_dict)
+    print(scheduler.state_dict())
+    prediction_x_changing = nn_model(x_changing)
+    
+    total_prediction_changing_diff = sum(abs(prediction_x_changing - prediction_x_changing_previous))
+    print("TOTALPREDICTION")
+    print(total_prediction_changing_diff)
 
 
 #%%
@@ -566,6 +696,9 @@ epr_vector_method_1=np.zeros(1)
 delta_S = np.ones(Keq_constant.size)
 delta_S_metab = np.ones(metabolites.size)
 E_regulation=np.ones(Keq_constant.size)
+
+E_regulation[17]=0.0 #zero PFK
+
 epsilon = 0.0
 
 final_choices1=np.zeros(1)
@@ -576,13 +709,13 @@ final_KQ_r=np.zeros(Keq_constant.size)
 
 reward_vec_1=np.zeros(1)
 
-ipolicy=4 #USE 7 or 4
+ipolicy=7 #USE 7 or 4
 React_Choice=0
 total_reward1=0
 
 v_log_counts = np.log(variable_concs_begin*Concentration2Count)
 i=0
-while( (i < 1000) and (np.max(delta_S_metab) > 0) ):
+while( (i < 500) and (np.max(delta_S_metab) > 0) ):
     reward=0
     
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, E_regulation))
@@ -607,27 +740,25 @@ while( (i < 1000) and (np.max(delta_S_metab) > 0) ):
         
     [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
     
-
-
     if (React_Choice == -1) or (np.max(delta_S_metab)<=0):
         
         print("FINISHED OPTIMIZING")
         break
     
-    if (np.max(rxn_flux) < 1):
-        
-        print("FLUX ZEROING")
-        break
-    
     React_Choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S_metab,delta_S,
-                                        ccc, KQ_f, E_regulation,v_log_counts)  
+                                        ccc, KQ_f, E_regulation,v_log_counts)
+    
         
     newE = max_entropy_functions.calc_reg_E_step(E_regulation, React_Choice, nvar, v_log_counts, 
                            f_log_counts, target_v_log_counts, S_mat, A, rxn_flux, KQ_f,
                            delta_S_metab)
         
-    #Warning: We must set pfk and pfk_3 to the same value since the 
     E_regulation[React_Choice] = newE
+    print("React_Choice")
+    print(React_Choice)
+    print("newE")
+    print(newE)
+    print(np.max(delta_S_metab))
 
     i += 1
         
@@ -638,25 +769,14 @@ rxn_flux_1 = rxn_flux
 KQ_f_1=KQ_f
 
 if (use_experimental_data == True and use_low_high == False and ipolicy==7):
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'activities_experiment_method2_highhigh.txt', E_reg1, fmt='%1.30f')
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'flux_experiment_method2_highhigh.txt', rxn_flux_1, fmt='%1.30f')
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'KQF_experiment_method2_highhigh.txt', KQ_f_1, fmt='%1.30f')
+    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'activities_experiment_method2_highhigh_PFKZERO.txt', E_reg1, fmt='%1.30f')
+    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'flux_experiment_method2_highhigh_PFKZERO.txt', rxn_flux_1, fmt='%1.30f')
+    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'KQF_experiment_method2_highhigh_PFKZERO.txt', KQ_f_1, fmt='%1.30f')
     
 if (use_experimental_data == True and use_low_high == False and ipolicy==4):
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'activities_experiment_method1_highhigh.txt', E_reg1, fmt='%1.30f')
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'flux_experiment_method1_highhigh.txt', rxn_flux_1, fmt='%1.30f')
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'KQF_experiment_method1_highhigh.txt', KQ_f_1, fmt='%1.30f')
-    
-if (use_experimental_data == True and use_low_high == True and ipolicy==7):
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'activities_experiment_method2_highlow.txt', E_reg1, fmt='%1.30f')
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'flux_experiment_method2_highlow.txt', rxn_flux_1, fmt='%1.30f')
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'KQF_experiment_method2_highlow.txt', KQ_f_1, fmt='%1.30f')
-    
-if (use_experimental_data == True and use_low_high == True and ipolicy==4):
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'activities_experiment_method1_highlow.txt', E_reg1, fmt='%1.30f')
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'flux_experiment_method1_highlow.txt', rxn_flux_1, fmt='%1.30f')
-    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'KQF_experiment_method1_highlow.txt', KQ_f_1, fmt='%1.30f')
-  
+    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'activities_experiment_method1_highhigh_PFKZERO.txt', E_reg1, fmt='%1.30f')
+    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'flux_experiment_method1_highhigh_PFKZERO.txt', rxn_flux_1, fmt='%1.30f')
+    np.savetxt(cwd+'\\TCA_PPP_GLYCOLYSIS_GOGAT\\'+'KQF_experiment_method1_highhigh_PFKZERO.txt', KQ_f_1, fmt='%1.30f')
 #
 
 #%%
