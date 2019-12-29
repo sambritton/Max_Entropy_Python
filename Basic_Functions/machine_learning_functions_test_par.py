@@ -99,17 +99,9 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
     if ( (np.isnan(e_val_future).any()) or (np.isnan(e_val_old).any()) ):
         print(v_log_counts_future)
         print(v_log_counts_old)
-    #if (( (v_log_counts_future>50).any()) or (v_log_counts_future<-50).any()):
-    #    print(min(np.exp(v_log_counts_future - target_v_log_counts - scale_future)))
-    #    print(max(np.exp(v_log_counts_future - target_v_log_counts - scale_future)))
-    #   print(scale_future)
 
     reward_s = e_val_old - e_val_future
-    #val_old[val_old<0.0] = 0
-    #val_future[val_future<0] = 0
 
-    #reward_s = np.sum(val_old - val_future) #this is positive if val_future is less, so we need
-    
     #originally, does nothing, but turns to penalty when regulating a new reaction
     psi = 1.0 
     
@@ -450,7 +442,6 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     
     
     delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts, target_v_log_counts)
-    delta_S = max_entropy_functions.calc_deltaS(v_log_counts, f_log_counts, S_mat, KQ_f)
     
     [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
     

@@ -167,8 +167,47 @@ def conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR):
     fcc = np.identity(len(fcc_temp)) - fcc_temp
 
     return [ccc,fcc]
-
+#indices were off
 def calc_deltaS(log_vcounts,target_log_vcounts, log_fcounts, S_mat, KQ):
+    pt_forward=np.zeros(len(KQ))
+
+    pt_reverse=np.zeros(len(KQ))
+
+    log_target_metabolite = np.append(target_log_vcounts, log_fcounts)
+    log_metabolite = np.append(log_vcounts, log_fcounts)
+
+    delta_S = np.zeros(len(KQ))
+    delta_S_new = np.zeros(len(KQ))
+    row, = np.where(KQ >= 1)
+    P_Forward = (S_mat > 0)
+    PdotMetab_Forward = np.matmul(P_Forward, log_metabolite) #takes rxn x metab mult metab x 1 = rxn x 1
+    PdotTargetMetab_Forward = np.matmul(P_Forward, log_target_metabolite)
+
+    delta_S[row] = PdotMetab_Forward[row] - PdotTargetMetab_Forward[row]
+
+    #necessary to loop over the rows instead 
+    for rxn in row:
+        forward_val = (np.multiply(P_Forward[rxn,:], log_metabolite))
+        forward_target = (np.multiply(P_Forward[rxn,:], log_target_metabolite))
+        pt_forward[rxn] = np.max(forward_val - forward_target)
+        delta_S_new[rxn] = pt_forward[rxn]
+
+    row, = np.where(KQ < 1)
+    P_Reverse = (S_mat < 0)
+    PdotMetab_Reverse = np.matmul(P_Reverse, log_metabolite)
+    PdotTargetMetab_Reverse = np.matmul(P_Reverse, log_target_metabolite)
+    delta_S[row] = PdotMetab_Reverse[row] - PdotTargetMetab_Reverse[row]
+    
+    for rxn in row:
+        reverse_val = (np.multiply(P_Reverse[rxn,:], log_metabolite))
+        reverse_target = (np.multiply(P_Reverse[rxn,:], log_target_metabolite))
+        pt_reverse[rxn] = np.max(reverse_val - reverse_target)
+        delta_S_new[rxn] = pt_reverse[rxn]
+    return delta_S_new
+
+
+#this is wrong
+def calc_deltaS_old(log_vcounts,target_log_vcounts, log_fcounts, S_mat, KQ):
     
     pt_forward=np.zeros(len(KQ))
     pt_reverse=np.zeros(len(KQ))
@@ -191,9 +230,9 @@ def calc_deltaS(log_vcounts,target_log_vcounts, log_fcounts, S_mat, KQ):
     
     for rxn in range(0,P_Forward.shape[0]):
         #print(rxn)
-        forward_val = np.max(np.multiply(P_Forward[rxn,:], log_metabolite))
-        forward_target = np.max(np.multiply(P_Forward[rxn,:], log_target_metabolite))
-        pt_forward[rxn] = forward_val - forward_target
+        forward_val = (np.multiply(P_Forward[rxn,:], log_metabolite))
+        forward_target = (np.multiply(P_Forward[rxn,:], log_target_metabolite))
+        pt_forward[rxn] = np.max(forward_val - forward_target)
 
     delta_S_new[row] = pt_forward[row]
     
@@ -207,16 +246,16 @@ def calc_deltaS(log_vcounts,target_log_vcounts, log_fcounts, S_mat, KQ):
     
     
     for rxn in range(0,P_Reverse.shape[0]):
-        reverse_val = np.max(np.multiply(P_Reverse[rxn,:], log_metabolite))
-        reverse_target = np.max(np.multiply(P_Reverse[rxn,:], log_target_metabolite))
+        reverse_val = (np.multiply(P_Reverse[rxn,:], log_metabolite))
+        reverse_target = (np.multiply(P_Reverse[rxn,:], log_target_metabolite))
 
-        pt_reverse[rxn] = reverse_val - reverse_target
+        pt_reverse[rxn] = np.max(reverse_val - reverse_target)
     
     
     delta_S_new[row] = pt_reverse[row]
     #breakpoint()
     
-    return delta_S
+    return delta_S_new
 
 def calc_deltaS_metab(v_log_counts, target_v_log_counts ):
 
@@ -242,7 +281,7 @@ def get_enzyme2regulate(ipolicy, delta_S_metab,delta_S, ccc, KQ, E_regulation, v
     if (ipolicy==4):
         
         sm_idx = [i for i,val in enumerate(delta_S_metab) if val >= 0]
-        S_index = [i for i,val in enumerate(delta_S) if val >= 0]
+        S_index = [i for i,val in enumerate(delta_S) if val > 0]
         print(S_index)
         #breakpoint()
         #sm_idx = [i for i,val in enumerate(delta_S_metab)]
@@ -256,36 +295,7 @@ def get_enzyme2regulate(ipolicy, delta_S_metab,delta_S, ccc, KQ, E_regulation, v
         
         row_index = sm_idx#sm_idx.tolist()
         col_index = S_index
-        
-    
-        if (ipolicy == 1):
-            temp = ccc[np.ix_(row_index, col_index) ]
-            temp_id = (temp > 0) #ccc>0 means derivative is positive (dlog(conc)/dlog(activity)>0) 
-        
-
-            
-            bob = temp_id * temp
-            bobSum = np.sum(bob, axis = 0)
-                
-            temp_id_bob, = np.where(bobSum > 1.0e-20)
-            S_index = S_index[temp_id_bob]
-
-            col_index = S_index.tolist()
-            temp = ccc[np.ix_(row_index, col_index) ]
-            temp2 = temp > 0
-                
-                
-            
-            temp2_max_val = np.max(np.sum(temp2, axis=0)) #sum rows
-            temp2_sum = np.sum(temp2, axis=0)
-            max_indices = np.argwhere(temp2_sum == temp2_max_val )
-            values = np.sum(temp[:,max_indices], axis=0)
-            index_max_value = np.argmax(values)
-                
-            reaction_choice = S_index[max_indices[index_max_value]]
-            
-            return reaction_choice
-        
+               
         if (ipolicy == 4):
         
             temp = ccc[np.ix_(sm_idx,S_index)]#np.ix_ does outer product
@@ -342,7 +352,6 @@ def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts,
     method = 1
     delta_S_val_method1=0.0
     
-    #breakpoint()
     vcounts = np.exp(log_vcounts)
     fcounts = np.exp(log_fcounts)
     E=E_vec[React_Choice]
