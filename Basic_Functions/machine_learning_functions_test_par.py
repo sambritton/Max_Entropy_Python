@@ -100,33 +100,14 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
         print(v_log_counts_future)
         print(v_log_counts_old)
 
-    reward_s = e_val_old - e_val_future
-
-    #originally, does nothing, but turns to penalty when regulating a new reaction
-    psi = 1.0 
-    
-    #reward_s = e_val_old-e_val_future
-    num_regulated_new = np.sum(E_Regulation_new==1)
-    num_regulated_old = np.sum(E_Regulation_old==1)
-
-    if (num_regulated_new != num_regulated_old):
-        #then you regulated a new reaction:
-        psi = penalty_reward_scalar
-
-    if ((reward_s < 0.0)):
-        final_reward = penalty_exclusion_reward
-        
-    if (reward_s >= 0.0):
-        final_reward = psi * reward_s
-        #if negative (-0.01) -> take fastest path
-        #if positive (0.01) -> take slowest path
-        
+    reward_s = (e_val_old - e_val_future)
+    final_reward=reward_s     
     if ((  scale_future_max <=0.0)):
         #The final reward is meant to maximize the EPR value. However, there was some residual error in ds_metab
         #that must be taken into account. We therefore add the last reward_s to the EPR value. 
         
         epr_future = max_entropy_functions.entropy_production_rate(KQ_f_new, KQ_r_new, E_Regulation_new)
-        final_reward = 1.0 * epr_future + psi*reward_s 
+        final_reward = 1.0 * epr_future + reward_s 
         
     return final_reward
 
@@ -138,15 +119,15 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     random_steps_taken=0
     nn_steps_taken=0
     
-    final_state=np.zeros(shape=(num_rxns,))
-    final_KQ_f=np.zeros(shape=(num_rxns,))
-    final_KQ_r=np.zeros(shape=(num_rxns,))
+    final_state=[]
+    final_KQ_f=[]
+    final_KQ_r=[]
     reached_terminal_state=False
     average_loss=[]
     
     final_reward=0
     sum_reward_episode = 0
-    end_of_path = 1500 #this is the maximum length a path can take
+    end_of_path = 5000 #this is the maximum length a path can take
     KQ_f_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
     KQ_r_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
     states_matrix = np.zeros(shape=(num_rxns, end_of_path+1))
@@ -157,15 +138,15 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     
     
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method1,
-                            ftol=1e-8, 
+                            xtol=1e-15, 
                             args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
-    #if (res_lsq.success==False):
-    #    print("USING DOGBOX")
-    #    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method2,
-    #        bounds=(-500,500),ftol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
-    #    if (res_lsq.success==False):
-    #        print("USING 3rd METHOD")
-    #        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method3,ftol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
+    if (res_lsq.success==False):
+        print("USING DOGBOX")
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method2,
+            bounds=(-500,500),xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
+        if (res_lsq.success==False):
+            print("USING 3rd METHOD")
+            res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
     
     v_log_counts_matrix[:,0] = res_lsq.x.copy()
     #v_log_counts_matrix[:,0]=v_log_counts_static.copy()
@@ -242,22 +223,8 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
                 print(rxn_flux_path)
                 print("original epr")
                 print(epr_path)
-                
-                
-
-# =============================================================================
-#             for state in range(0,t+1):
-#                 last_state = states_matrix[:,state].copy()
-#                 if ((current_state==last_state).all()):
-#                     end_of_path=t+1
-#                     
-#                     print("**************************************Path Length******************************************")
-#                     print(end_of_path)
-#                     print("Final STATE")
-#                     print(states_matrix[:,state])
-#                     print(rxn_flux_path)
-#                     print(epr_path)
-# =============================================================================
+                print("all rewards")
+                print(reward_vec[0:t+1])                
 
         ##BEGIN LEARNING
         tau = t - n_back_step + 1
@@ -299,6 +266,9 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
             
             optimizer.zero_grad()
             loss.backward()
+            clipping_value = 1.0
+            torch.nn.utils.clip_grad_norm_(nn_model.parameters(), clipping_value)
+
             optimizer.step()
             end_nn = time.time()
             total_time_nn+=end_nn-begin_nn
@@ -310,11 +280,6 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     
     #after episode is finished, take average loss
     average_loss_episode = np.mean(average_loss)
-    #print(average_loss)
-    #print("total_time_cpu")
-    #print(total_time_cpu)
-    #print("total_time_nn")
-    #print(total_time_nn)
     print("index of max error on path")
     print(average_loss.index(max(average_loss)))
     return [sum_reward_episode, average_loss_episode,max(average_loss),final_reward, final_state, final_KQ_f,final_KQ_r,\
@@ -346,25 +311,23 @@ def potential_step(index, other_args):
 
     start_cpu = time.time()
     new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method1,
-                                ftol=1e-8, 
+                                xtol=1e-15, 
                                 args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
                                       delta_increment_for_small_concs, Keq_constant, trial_state_sample))
     if (new_res_lsq.success==False):
-        print("Failed lm in potential step")
+        print("USING DOGBOX")
         print("v_log_counts")
         print(v_log_counts)
         print("trial_state_sample")
         print(trial_state_sample)
-        print("new_res_lsq")
-        print(new_res_lsq)
-        #new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method2,
-        #    bounds=(-500,500), ftol=1e-15, 
-        #    args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
-        #    delta_increment_for_small_concs, Keq_constant, trial_state_sample))
-        #if (new_res_lsq.success==False):
-        #    new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method3,ftol=1e-15, 
-        #    args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
-        #    delta_increment_for_small_concs, Keq_constant, trial_state_sample))
+        new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method2,
+            bounds=(-500,500), xtol=1e-15, 
+            args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
+            delta_increment_for_small_concs, Keq_constant, trial_state_sample))
+        if (new_res_lsq.success==False):
+            new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method3,xtol=1e-15, 
+            args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
+            delta_increment_for_small_concs, Keq_constant, trial_state_sample))
     
     end_cpu = time.time()
 
@@ -389,11 +352,6 @@ def potential_step(index, other_args):
                                   KQ_f_new, KQ_r_new,\
                                   trial_state_sample, state)
 
-    if (new_res_lsq.success==False):
-        print("removing choice b/c failure to converge")
-        current_reward = penalty_exclusion_reward
-    
-    
     action_value = current_reward + (gamma) * value_current_state #note, action is using old KQ values
 
     return [action_value, current_reward,KQ_f_new,KQ_r_new,new_v_log_counts,trial_state_sample,new_delta_S_metab, end_cpu-start_cpu,end_nn-begin_nn,value_current_state]
@@ -411,20 +369,18 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     rxn_choices = [i for i in range(num_rxns)]
     
     res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method1,
-                            ftol=1e-8, 
+                            xtol=1e-15, 
                             args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
     if (res_lsq.success==False):
-        print("Failed lm")
+        print("USING DOGBOX")
         print("v_log_counts_path")
         print(v_log_counts_path)
         print("state")
         print(state)
-        print("res_lsq")
-        print(res_lsq)
-        #res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method2,
-        #    bounds=(-500,500),ftol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
-        #if (res_lsq.success==False):
-        #    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method3,ftol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method2,
+            bounds=(-500,500),xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
+        if (res_lsq.success==False):
+            res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
     
 
     #v_log_counts = v_log_counts_path.copy()
@@ -444,7 +400,6 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts, target_v_log_counts)
     
     [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
-    
     
     indices = [i for i in range(0,len(Keq_constant))]
     action_value_vec = np.zeros(num_rxns)
@@ -477,7 +432,8 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         time_cpu+=async_result[act][7]
         time_nn+=async_result[act][8]
         current_state_vec[act] = async_result[act][9]
-
+    #print(current_reward_vec)
+    
     if (len(rxn_choices) == 0):
         print("OUT OF REWARDS")
         action_choice=-1
@@ -509,17 +465,7 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
             print("async_result")
             print(async_result)
             action_choice = -1
-        #try taking out random choice
-        #arr_choice_index = np.flatnonzero(action_value_vec[rxn_choices] == action_value_vec[rxn_choices].max())
-        #arr_choice=np.asarray(rxn_choices)[arr_choice_index]
-        
-        #arr_choice_reg = np.flatnonzero(state[arr_choice]<1)
-        #if (arr_choice_reg.size>1):
-        #    print('using tie breaker')
-        #    print(arr_choice[arr_choice_reg])
-        #    action_choice = np.random.choice(arr_choice[arr_choice_reg])
-        
-        
+
         unif_rand = np.random.uniform(0,1)
         if ( (unif_rand < epsilon_greedy) and (len(rxn_choices) > 0)):
             #if (len(rxn_choices)>1):
@@ -564,14 +510,6 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
             async_result[action_choice][4],\
             async_result[action_choice][5],\
             async_result[action_choice][6],used_random_step,time_cpu,time_nn]
-        
-    #return [action_choice,current_reward_vec[action_choice],\
-    #        KQ_f_matrix[:,action_choice],KQ_r_matrix[:,action_choice],\
-    #        v_log_counts_matrix[:,action_choice],\
-    #        states_matrix[:,action_choice],\
-    #        delta_S_metab_matrix[:,action_choice],used_random_step]
-    
-    
-    
+            
     
     

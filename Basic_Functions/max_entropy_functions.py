@@ -33,8 +33,8 @@ def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
     
     epr = +np.sum(KQ_f_reg[kq_ge1_idx] * safe_ln(KQ_f[kq_ge1_idx]))/sumOdds \
           -np.sum(KQ_f_reg[kq_le1_idx] * safe_ln(KQ_f[kq_le1_idx]))/sumOdds \
-          -np.sum(KQ_r_reg[kq_inv_le1_idx] * safe_ln(KQ_r[kq_inv_le1_idx]))/sumOdds \
-          +np.sum(KQ_r_reg[kq_inv_ge1_idx] * safe_ln(KQ_r[kq_inv_ge1_idx]))/sumOdds
+          -np.sum(KQ_r_reg[kq_inv_le1_idx] * safe_ln(KQ_f[kq_inv_le1_idx]))/sumOdds \
+          +np.sum(KQ_r_reg[kq_inv_ge1_idx] * safe_ln(KQ_f[kq_inv_ge1_idx]))/sumOdds
     return epr
 
 
@@ -167,47 +167,8 @@ def conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR):
     fcc = np.identity(len(fcc_temp)) - fcc_temp
 
     return [ccc,fcc]
-#indices were off
+
 def calc_deltaS(log_vcounts,target_log_vcounts, log_fcounts, S_mat, KQ):
-    pt_forward=np.zeros(len(KQ))
-
-    pt_reverse=np.zeros(len(KQ))
-
-    log_target_metabolite = np.append(target_log_vcounts, log_fcounts)
-    log_metabolite = np.append(log_vcounts, log_fcounts)
-
-    delta_S = np.zeros(len(KQ))
-    delta_S_new = np.zeros(len(KQ))
-    row, = np.where(KQ >= 1)
-    P_Forward = (S_mat > 0)
-    PdotMetab_Forward = np.matmul(P_Forward, log_metabolite) #takes rxn x metab mult metab x 1 = rxn x 1
-    PdotTargetMetab_Forward = np.matmul(P_Forward, log_target_metabolite)
-
-    delta_S[row] = PdotMetab_Forward[row] - PdotTargetMetab_Forward[row]
-
-    #necessary to loop over the rows instead 
-    for rxn in row:
-        forward_val = (np.multiply(P_Forward[rxn,:], log_metabolite))
-        forward_target = (np.multiply(P_Forward[rxn,:], log_target_metabolite))
-        pt_forward[rxn] = np.max(forward_val - forward_target)
-        delta_S_new[rxn] = pt_forward[rxn]
-
-    row, = np.where(KQ < 1)
-    P_Reverse = (S_mat < 0)
-    PdotMetab_Reverse = np.matmul(P_Reverse, log_metabolite)
-    PdotTargetMetab_Reverse = np.matmul(P_Reverse, log_target_metabolite)
-    delta_S[row] = PdotMetab_Reverse[row] - PdotTargetMetab_Reverse[row]
-    
-    for rxn in row:
-        reverse_val = (np.multiply(P_Reverse[rxn,:], log_metabolite))
-        reverse_target = (np.multiply(P_Reverse[rxn,:], log_target_metabolite))
-        pt_reverse[rxn] = np.max(reverse_val - reverse_target)
-        delta_S_new[rxn] = pt_reverse[rxn]
-    return delta_S_new
-
-
-#this is wrong
-def calc_deltaS_old(log_vcounts,target_log_vcounts, log_fcounts, S_mat, KQ):
     
     pt_forward=np.zeros(len(KQ))
     pt_reverse=np.zeros(len(KQ))
