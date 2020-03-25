@@ -1,0 +1,6 @@
+Name: Eigen3
+Description: A C++ template library for linear algebra: vectors, matrices, and related algorithms
+Requires:
+Version: 3.2.1
+Libs:
+Cflags: -I/people/manc568/projects/Max_Entropy_Python/potential_step_module/include/eigen3

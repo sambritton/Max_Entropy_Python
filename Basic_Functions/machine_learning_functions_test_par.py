@@ -414,10 +414,14 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
 
     start = time.time()
     
+    results = potential_step_module.dispatch(indices, variables)
+
+    '''
     with Pool() as pool:
         async_result = pool.starmap(potential_step, zip(indices, repeat(variables)))
         pool.close()
         pool.join()
+        '''
     end = time.time()
     
     total = end-start
