@@ -13,6 +13,10 @@
 
 module purge
 module load python/anaconda3
+touch time.start
 
 srun python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION.py $SLURM_ARRAY_TASK_ID 2 0 1e-06 
+touch time.end
+
+ls --full-time time.*
 

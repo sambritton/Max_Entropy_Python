@@ -53,7 +53,6 @@ from multiprocessing import Pool
 from itertools import repeat
 import torch
 
-
 Method2 = 'dogbox'
 Method1 = 'lm'
 Method3 = 'trf'
@@ -412,10 +411,12 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
                mu0, S_mat, R_back_mat, P_mat, 
                delta_increment_for_small_concs, Keq_constant]
 
+    import sys
+    sys.path.append('/people/manc568/projects/Max_Entropy_Python/build/potential_step_module')
+    import pstep
     start = time.time()
     
-    results = potential_step_module.dispatch(indices, variables)
-
+    results = pstep.dispatch(indices, variables)
     '''
     with Pool() as pool:
         async_result = pool.starmap(potential_step, zip(indices, repeat(variables)))

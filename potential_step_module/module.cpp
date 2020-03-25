@@ -1,14 +1,27 @@
 
 #include <vector>
+#include <iostream>
 #include <pybind11/pybind11.h>
 
 namespace py = pybind11;
 
-int dispatch(int i, int j) {
-    return i + j;
+void dispatch(const std::vector<int>& indices, const std::vector<double>& variables) {
+    std::cout << "Dispatching jobs...\nGot indices:\n";
+
+    for (const auto& i : indices)
+    {
+        std::cout << i << ", ";
+    }
+    std::cout << "\nGot variables:\n";
+
+    for (const auto& i : variables)
+    {
+        std::cout << i << ", ";
+    }
+    std::cout << "\n";
 }
 
-PYBIND11_MODULE(potential_step, m) {
+PYBIND11_MODULE(pstep, m) {
     m.doc() = "pybind11 example plugin"; // optional module docstring
-    m.def("add", &add, "A function which adds two numbers");
+    m.def("dispatch", &dispatch, "A function which adds two numbers");
 }

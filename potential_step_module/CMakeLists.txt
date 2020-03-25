@@ -3,19 +3,19 @@ set(PYBIND11_CPP_STANDARD -std=c++14)
 include(FindPythonInterp)
 
 add_library(
-    potential_step
-    MODULE main.cpp)
+    pstep
+    MODULE module.cpp)
 
 target_link_libraries(
-    potential_step
+    pstep
     PRIVATE pybind11::module)
 
 target_include_directories(
-    potential_step
+    pstep
     PRIVATE "include")
 
 set_target_properties(
-    potential_step
+    pstep
     PROPERTIES
         PREFIX "${PYTHON_MODULE_PREFIX}"
         SUFFIX "${PYTHON_MODULE_EXTENSION}")
