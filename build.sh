@@ -33,7 +33,7 @@ echo
 echo Checking for needed programs...
 echo
 
-which module
+type module
 if [ $? -eq 0 ]; then
     module load python/3.7.0
     module load cmake

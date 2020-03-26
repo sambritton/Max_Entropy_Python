@@ -405,24 +405,39 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     current_reward_vec = np.zeros(num_rxns)
     current_state_vec = np.zeros(num_rxns)
 
-    variables=[nn_model,state, nvar, v_log_counts, f_log_counts,\
-               complete_target_log_counts, A, rxn_flux, KQ_f,\
-               delta_S_metab,\
-               mu0, S_mat, R_back_mat, P_mat, 
-               delta_increment_for_small_concs, Keq_constant]
+    variables = {
+        'nn_model': nn_model,
+        'state': state,
+        'nvar': nvar,
+        'v_log_counts': v_log_counts,
+        'f_log_counts ': f_log_counts ,
+        'complete_target_log_counts': complete_target_log_counts,
+        'A': A,
+        'rxn_flux': rxn_flux,
+        'KQ_f ': KQ_f ,
+        'delta_S_metab ': delta_S_metab ,
+        'mu0': mu0,
+        'S_mat': S_mat,
+        'R_back_mat': R_back_mat,
+        'P_mat ': P_mat ,
+        'delta_increment_for_small_concs': delta_increment_for_small_concs,
+        'Keq_constant': Keq_constant,
+    }
 
-    import sys
-    sys.path.append('/people/manc568/projects/Max_Entropy_Python/build/potential_step_module')
-    import pstep
-    start = time.time()
+    import sys, os
+    shared_lib_dir = '../build/potential_step_module/'
+    if os.path.isdir(shared_lib_dir):
+        sys.path.append('../build/potential_step_module')
+        import pstep.dispatch as dispatch
+    else:
+        def dispatch(inices, variables):
+            with Pool() as pool:
+                async_result = pool.starmap(potential_step, zip(indices, repeat(variables.values())))
+                pool.close()
+                pool.join()
     
-    results = pstep.dispatch(indices, variables)
-    '''
-    with Pool() as pool:
-        async_result = pool.starmap(potential_step, zip(indices, repeat(variables)))
-        pool.close()
-        pool.join()
-        '''
+    start = time.time()
+    dispatch(indices, variables)
     end = time.time()
     
     total = end-start

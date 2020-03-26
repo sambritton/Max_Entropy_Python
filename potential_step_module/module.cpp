@@ -29,7 +29,7 @@ void dispatch(const std::vector<int>& indices, py::dict variables) {
     for (const auto& el : variables)
     {
         std::cout << "Got key " << el.first << " with type " << typeid(el.first).name() << "\n";
-        // std::cout << "and value " << el.second << " with type " << typeid(el.second).name << "\n\n";
+        std::cout << "and value " << el.second << " with type " << typeid(el.second).name() << "\n\n";
     }
 }
 
