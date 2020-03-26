@@ -42,3 +42,4 @@ To run a short simulation, cd to the GLYCOLYSIS_TCA_GOGAT folder. Use the comman
 python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION 1 4 0 1e-06 0.05 2 
 ```
 
+In Cascade, run "/home/scicons/cascade/apps/python/3.6/bin/python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION.py 1 2"

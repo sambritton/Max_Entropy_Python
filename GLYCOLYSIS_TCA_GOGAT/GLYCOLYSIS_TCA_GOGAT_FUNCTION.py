@@ -443,8 +443,7 @@ def run(argv):
        
     delta_S_metab = max_entropy_functions.calc_deltaS_metab(res_lsq1.x, target_v_log_counts);
     
-    ipolicy = 7 #use ipolicy=1 or 4
-    reaction_choice = max_entropy_functions.get_enzyme2regulate(ipolicy, delta_S_metab, ccc, KQ_f, E_regulation, res_lsq1.x)                                                        
+    ipolicy = 7 #use ipolicy=1 or 4                                                        
     
     #%% END Basic test
     
