@@ -1,65 +1,94 @@
 #!/usr/bin/env bash
 
 BUILDDIR=build
-PYTHON=python3
+PROJ_ROOT=$(pwd)
+LOCAL_INSTALL=$PROJ_ROOT/potential_step_module
 
-proj_root=$(pwd)
-
-echo Updating submodules...
-git submodule init
-git submodule update
-module load python/3.7.0
-module load cmake
-
-echo Installing Eigen headers...
-if [ -d ./potential_step_module/include/Eigen ]; then
-    echo Headers already installed.
-else
-    cp -r ./eigen3/Eigen ./potential_step_module/include
-fi
-
-echo Checking pybind11 installation...
-if [ ! -d pybind11/build ]
-then
-    mkdir ./pybind11/build
-    pushd ./pybind11/build
-    cmake ..
-    if [ ! $? -eq 0 ]
-    then
-        echo Error building pybind11...
+function error_check() {
+    if [ ! $? -eq 0 ]; then
+        echo
+        echo "Got error< $1 >"
+        echo
         exit 1
     fi
+}
+
+printenv PYTHON_EXE
+if [ ! $? -eq 0 ]; then
+    which python
+    error_check 'No python installation found on path...'
+    # User has not defined a python executable...
+    # just use the first python on the path
+    PYTHON_EXE=$(which python)
+fi
+
+echo
+echo Updating submodules...
+echo
+
+git submodule init
+git submodule update
+
+echo
+echo Checking for needed programs...
+echo
+
+which module
+if [ $? -eq 0 ]; then
+    module load python/3.7.0
+    module load cmake
+fi
+
+echo
+echo Installing Eigen headers...
+echo
+
+if [ -d "$LOCAL_INSTALL/include/Eigen" ]; then
+    echo
+    echo Headers already installed.
+    echo
+else
+
+    cp -r eigen3/Eigen/ "$LOCAL_INSTALL/include/Eigen"
+    error_check 'installing eigen3'
+
     popd
+fi
+
+echo
+echo Checking pybind11 installation...
+echo
+if [ ! -d "$LOCAL_INSTALL/pybind11" ]
+then
+    cp -r pybind11/include/pybind11 $LOCAL_INSTALL/pybind11
 fi
 
 if [ -d $BUILDDIR ]
 then
+    echo
     echo Removing old builds...
+    echo
     rm -rf $BUILDDIR
 fi
 
+echo
 echo Building...
+echo
 mkdir $BUILDDIR
 pushd $BUILDDIR
 cmake ..
+error_check 'Could not configure bindings with cmake'
 
-if [ ! $? -eq 0 ]
-then
-    echo CMake error... Please check CMake output logs.
-    exit 1
-fi
-
+echo
 echo Compiling...
+echo
 make
+error_check 'Could not compile bindings'
 
-if [ ! $? -eq 0 ]
-then
-    echo Make error... Please check configuration.
-    exit 1
-fi
-
+echo
 echo Running tests...
-cp $proj_root/potential_step_module/tests/*.py ./potential_step_module
+echo
+cp $PROJ_ROOT/potential_step_module/tests/*.py ./potential_step_module
 
 echo
 echo -----------TESTING-----------
@@ -67,7 +96,7 @@ echo
 
 for _test in $(ls potential_step_module/*.py)
 do
-    $PYTHON ./$_test 2>&1 > $_test".log"
+    $PYTHON_EXE ./$_test 2>&1 > $_test".log"
     if [ ! $? -eq 0 ]; then
         echo -- Test $(basename $_test) failed! See "$_test".log for output.
     else
