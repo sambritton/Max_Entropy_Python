@@ -425,11 +425,13 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     }
 
     import sys, os
-    shared_lib_dir = '../build/potential_step_module/'
+    shared_lib_dir = './build/potential_step_module/'
     if os.path.isdir(shared_lib_dir):
-        sys.path.append('../build/potential_step_module')
-        import pstep.dispatch as dispatch
+        print('-- Loading C++ potential step calculations')
+        sys.path.append(shared_lib_dir)
+        from pstep import dispatch
     else:
+        print('-- Using Python potential step calculations')
         def dispatch(inices, variables):
             with Pool() as pool:
                 async_result = pool.starmap(potential_step, zip(indices, repeat(variables.values())))
