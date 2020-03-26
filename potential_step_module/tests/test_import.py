@@ -1,3 +1,3 @@
-import potential_step
+import pstep
 
 print("\nImport successful")
