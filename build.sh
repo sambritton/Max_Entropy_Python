@@ -4,7 +4,8 @@ BUILDDIR=build
 BUILD=1
 TEST=1
 PROJ_ROOT=$(pwd)
-LOCAL_INSTALL=$PROJ_ROOT/potential_step_module
+MODDIR=$PROJ_ROOT/potential_step_module
+OUTPUTDIR="$PROJ_ROOT/$BUILDDIR/potential_step_module"
 
 for i in "$@"
 do
@@ -48,7 +49,7 @@ if [ ! $? -eq 0 ]; then
 fi
 
 PYTHON_VERSION=$($PYTHON_EXE --version 2>&1)
-$PYTHON_EXE $PROJ_ROOT/potential_step_module/tests/is_py3.py
+$PYTHON_EXE $MODDIR/tests/is_py3.py
 error_check "Python installation found by script ($PYTHON_VERSION) is less than 3.5"
 
 echo
@@ -77,24 +78,21 @@ if [ "$BUILD" -eq "1" ]; then
     echo Installing Eigen headers...
     echo
 
-    if [ -d "$LOCAL_INSTALL/include/Eigen" ]; then
+    if [ -d "$MODDIR/include/Eigen" ]; then
         echo
         echo Headers already installed.
         echo
     else
-
-        cp -r eigen3/Eigen/ "$LOCAL_INSTALL/include/Eigen"
+        cp -r eigen3/Eigen/ "$MODDIR/include"
         error_check 'installing eigen3'
-
-        popd
     fi
 
     echo
     echo Checking pybind11 installation...
     echo
-    if [ ! -d "$LOCAL_INSTALL/include/pybind11" ]
+    if [ ! -d "$MODDIR/include/pybind11" ]
     then
-        cp -r pybind11/include/pybind11 $LOCAL_INSTALL/include/pybind11
+        cp -r pybind11/include/pybind11 $MODDIR/include
     fi
 
     if [ -d $BUILDDIR ]
@@ -129,13 +127,13 @@ if [ "$TEST" -eq "1" ]; then
     echo
     echo Cleaning up from previous builds if stale logs exist...
     echo
-    rm $PROJ_ROOT/$BUILDDIR/potential_step_module/*.py 2>&1 > /dev/null
-    rm $PROJ_ROOT/$BUILDDIR/potential_step_module/*.log 2>&1 > /dev/null
+    rm $OUTPUTDIR/*.py 2>&1 > /dev/null
+    rm $OUTPUTDIR/*.log 2>&1 > /dev/null
 
     echo
     echo Preparing newest version of tests...
     echo
-    cp $PROJ_ROOT/potential_step_module/tests/test_*.py $PROJ_ROOT/$BUILDDIR/potential_step_module
+    cp $MODDIR/tests/test_*.py $OUTPUTDIR
 
     echo
     echo -----------TESTING-----------
@@ -143,7 +141,7 @@ if [ "$TEST" -eq "1" ]; then
 
     FAIL=0
 
-    pushd $PROJ_ROOT/$BUILDDIR/potential_step_module 2>&1 >/dev/null
+    pushd $OUTPUTDIR 2>&1 >/dev/null
     for _test in $(ls ./test_*.py)
     do
         $PYTHON_EXE ./$_test 2>&1 > $_test".log"
@@ -167,7 +165,7 @@ if [ "$TEST" -eq "1" ]; then
     if [ "$FAIL" -eq "1" ]; then
         echo -- SUMMARY
         echo -- Tests failed...
-        echo -- Logs can be found in $PROJ_ROOT/$BUILDDIR/potential_step_module
+        echo -- Logs can be found in $OUTPUTDIR
         echo
         exit 1
     else
@@ -175,9 +173,9 @@ if [ "$TEST" -eq "1" ]; then
         echo -- Done! All tests passed.
         echo 
 
-        if [ $(ls $PROJ_ROOT/$BUILDDIR/potential_step_module/*.py | wc -l) -gt 0 ]; then
-            rm $PROJ_ROOT/$BUILDDIR/potential_step_module/*.py
-            rm $PROJ_ROOT/$BUILDDIR/potential_step_module/*.log
+        if [ $(ls $OUTPUTDIR/*.py | wc -l) -gt 0 ]; then
+            rm $OUTPUTDIR/*.py
+            rm $OUTPUTDIR/*.log
         fi
 
         exit 0
