@@ -30,6 +30,4 @@ before_install:
     - python --version
     - lsb_release -a
 
-script:
-    - ./build.sh --compile-only
-    - ./build.sh --test-only
+script: ./build.sh
