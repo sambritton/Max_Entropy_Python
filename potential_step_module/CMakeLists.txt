@@ -12,15 +12,19 @@ target_link_libraries(
 
 target_include_directories(
     pstep
-    PRIVATE "include")
+    PRIVATE SYSTEM "include")
+
+target_include_directories(
+    pstep
+    PRIVATE "pstep")
 
 target_link_libraries(
     pstep
     PRIVATE warnings options)
 
-target_link_libraries(
-    pstep
-    PRIVATE OpenMP::OpenMP_CXX)
+#target_link_libraries(
+#    pstep
+#    SYSTEM PRIVATE OpenMP::OpenMP_CXX)
 
 set_target_properties(
     pstep

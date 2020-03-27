@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message("CMake looking for pybind11...")
 add_subdirectory(pybind11)
 
-find_package(OpenMP REQUIRED)
+#find_package(OpenMP REQUIRED)
 
 enable_testing()
 
