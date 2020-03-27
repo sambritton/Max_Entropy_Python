@@ -4,9 +4,7 @@
 # Set language to python since at least the result of that is something useful.
 language: python
 python:
-    - "3.6"
     - "3.7"
-    - "3.8"
 # Manage the C/C++ compiler manually
 env:
     - CC=gcc-7   CXX=g++-7
