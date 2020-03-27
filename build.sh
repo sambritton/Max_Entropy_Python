@@ -73,9 +73,9 @@ fi
 echo
 echo Checking pybind11 installation...
 echo
-if [ ! -d "$LOCAL_INSTALL/pybind11" ]
+if [ ! -d "$LOCAL_INSTALL/include/pybind11" ]
 then
-    cp -r pybind11/include/pybind11 $LOCAL_INSTALL/pybind11
+    cp -r pybind11/include/pybind11 $LOCAL_INSTALL/include/pybind11
 fi
 
 if [ -d $BUILDDIR ]
@@ -132,7 +132,7 @@ fi
 
 popd
 
-if [ $FAIL ]; then
+if [ "$FAIL" -eq "1" ]; then
     echo
     echo Tests failed...
     echo

@@ -6,10 +6,26 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "max_entropy_functions.hpp"
+
 namespace py = pybind11;
 
 constexpr int potential_step()
 {
+    /*
+    newE = max_entropy_functions.calc_reg_E_step(
+            state
+            React_Choice
+            nvar
+            v_log_counts
+            f_log_counts
+            complete_target_log_counts
+            S_mat
+            A
+            rxn_flux
+            KQ_f
+            delta_S_metab)
+            */
     return 0;
 }
 
