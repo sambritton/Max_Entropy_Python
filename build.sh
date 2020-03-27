@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 
 BUILDDIR=build
+BUILD=1
+TEST=1
 PROJ_ROOT=$(pwd)
 LOCAL_INSTALL=$PROJ_ROOT/potential_step_module
+
+for i in "$@"
+do
+    case $i in
+        --compile-only)
+            TEST=0
+            ;;
+    esac
+done
 
 function error_check() {
     if [ ! $? -eq 0 ]; then
@@ -13,14 +24,18 @@ function error_check() {
     fi
 }
 
-printenv PYTHON_EXE
+printenv PYTHON_EXE 2>&1 >/dev/null
 if [ ! $? -eq 0 ]; then
-    which python
+    which python 2>&1 >/dev/null
     error_check 'No python installation found on path...'
     # User has not defined a python executable...
     # just use the first python on the path
     PYTHON_EXE=$(which python)
 fi
+
+PYTHON_VERSION=$($PYTHON_EXE --version 2>&1)
+$PYTHON_EXE $PROJ_ROOT/potential_step_module/tests/is_py3.py
+error_check "Python installation found by script ($PYTHON_VERSION) is less than 3.5"
 
 echo
 echo Updating submodules...
@@ -33,7 +48,7 @@ echo
 echo Checking for needed programs...
 echo
 
-type module
+type module 2>&1 >/dev/null
 if [ $? -eq 0 ]; then
     module load python/3.7.0
     module load cmake
@@ -90,22 +105,41 @@ echo Running tests...
 echo
 cp $PROJ_ROOT/potential_step_module/tests/*.py ./potential_step_module
 
-echo
-echo -----------TESTING-----------
-echo
+if [ "$TEST" -eq "1" ]; then
+    echo
+    echo -----------TESTING-----------
+    echo
 
-for _test in $(ls potential_step_module/*.py)
-do
-    $PYTHON_EXE ./$_test 2>&1 > $_test".log"
-    if [ ! $? -eq 0 ]; then
-        echo -- Test $(basename $_test) failed! See "$_test".log for output.
-    else
-        echo -- Test $_test passed
-    fi
-done
+    FAIL=0
+    for _test in $(ls potential_step_module/*.py)
+    do
+        $PYTHON_EXE ./$_test 2>&1 > $_test".log"
+        if [ ! $? -eq 0 ]; then
+            echo -- Test $(basename $_test) failed!
+            echo
+            echo Output:
+            cat ./$_test".log"
+            FAIL=1
+        else
+            echo -- Test $_test passed
+        fi
+    done
 
-echo
-echo -----------DONE TESTING-----------
-echo
+    echo
+    echo -----------DONE TESTING-----------
+    echo
+fi
 
 popd
+
+if [ $FAIL ]; then
+    echo
+    echo Tests failed...
+    echo
+    exit 1
+else
+    echo
+    echo Done!
+    echo 
+    exit 0
+fi
