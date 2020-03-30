@@ -11,10 +11,6 @@ import random
 
 from scipy.optimize import least_squares
 
-
-def safe_ln(x):
-    return np.log(x)
-
 def exp_normalize(x):
     b = x.max()
     y = np.exp(x - b)
@@ -31,33 +27,26 @@ def entropy_production_rate(KQ_f, KQ_r, E_Regulation):
     kq_inv_ge1_idx = np.where(KQ_r > 1)
     kq_inv_le1_idx = np.where(KQ_r <= 1)
     
-    epr = +np.sum(KQ_f_reg[kq_ge1_idx] * safe_ln(KQ_f[kq_ge1_idx]))/sumOdds \
-          -np.sum(KQ_f_reg[kq_le1_idx] * safe_ln(KQ_f[kq_le1_idx]))/sumOdds \
-          -np.sum(KQ_r_reg[kq_inv_le1_idx] * safe_ln(KQ_f[kq_inv_le1_idx]))/sumOdds \
-          +np.sum(KQ_r_reg[kq_inv_ge1_idx] * safe_ln(KQ_f[kq_inv_ge1_idx]))/sumOdds
+    epr = +np.sum(KQ_f_reg[kq_ge1_idx] * np.log(KQ_f[kq_ge1_idx]))/sumOdds \
+          -np.sum(KQ_f_reg[kq_le1_idx] * np.log(KQ_f[kq_le1_idx]))/sumOdds \
+          -np.sum(KQ_r_reg[kq_inv_le1_idx] * np.log(KQ_f[kq_inv_le1_idx]))/sumOdds \
+          +np.sum(KQ_r_reg[kq_inv_ge1_idx] * np.log(KQ_f[kq_inv_ge1_idx]))/sumOdds
     return epr
 
 
-# try using np.longdouble
 def derivatives(log_vcounts,log_fcounts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, E_Regulation):
 
     nvar = log_vcounts.size
     log_metabolites = np.append(log_vcounts,log_fcounts) #log_counts
-    #KQ_f = odds(log_metabolites,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, 1); #internal conversion to counts
     EKQ_f = odds_alternate(E_Regulation,log_metabolites,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq, 1); #internal conversion to counts
     Keq_inverse = np.power(Keq,-1);
-    #KQ_r = odds(log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse, -1);#internal conversion to counts
     EKQ_r = odds_alternate(E_Regulation,log_metabolites,mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse, -1);#internal conversion to counts
     
     s_mat = S_mat[:,0:nvar]
-    #deriv_alternate = S_mat.T.dot((EKQ_f - EKQ_r).T)
     deriv = s_mat.T.dot((EKQ_f - EKQ_r).T)
 
- 
     return(deriv.reshape(deriv.size,))
 
-
-# In[ ]:
 
 def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, direction = 1):
 
@@ -67,17 +56,13 @@ def odds(log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_conc
     return(KQ)
     
 def odds_alternate(E_Regulation,log_counts,mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, direction = 1):
-    
-    #counts = np.exp(log_counts) #convert to counts
-    #delta_counts = counts+delta_increment_for_small_concs;
-    #log_delta = safe_ln(delta_counts);
+
     scale_min = np.min(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))
     scale_max = np.max(-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))
     scale = (scale_max + scale_min)/2.0
     
     scaled_val = -direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)) - scale
-    #Q_inv_scale = np.exp(scale) * np.exp(scaled_val)
-
+    
     log_Q_inv = (-direction*(R_back_mat.dot(log_counts) + P_mat.dot(log_counts)))
     
     log_EKQ = np.log(np.multiply(E_Regulation,Keq_constant)) + log_Q_inv
@@ -85,8 +70,7 @@ def odds_alternate(E_Regulation,log_counts,mu0,S_mat, R_back_mat, P_mat, delta_i
     q_max = np.max(abs(log_Q_inv))
     
     ekq_max = np.max(abs(log_EKQ))
-    #if ekq_max>100 or q_max > 100:
-    #    print(log_counts)
+    
     if (q_max < ekq_max):
         Q_inv = np.exp(log_Q_inv)    
         KQ = np.multiply(Keq_constant,Q_inv)
@@ -94,7 +78,6 @@ def odds_alternate(E_Regulation,log_counts,mu0,S_mat, R_back_mat, P_mat, delta_i
     else:
         log_EKQ = np.log(np.multiply(E_Regulation,Keq_constant)) + log_Q_inv
         EKQ = np.exp(log_EKQ)
-
     
     return(EKQ)
 
@@ -152,7 +135,6 @@ def conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR):
     #ccc = -B*S_mat*flux
     #fcc = delta_mn - 1/flux_m * (RBS)_mn * flux_n
     
-    #np.nan_to_num(A,copy=False)
     B = np.linalg.pinv(A[0:nvar,0:nvar]);
     
     ccc = np.matmul(-B, S_mat[:,0:nvar].T)*rxn_flux
@@ -181,7 +163,6 @@ def calc_deltaS(log_vcounts,target_log_vcounts, log_fcounts, S_mat, KQ):
     row, = np.where(KQ >= 1)
     
     P_Forward = (S_mat[row,:] > 0)
-    
     
     PdotMetab_Forward = np.matmul(P_Forward, log_metabolite) #takes rxn x metab mult metab x 1 = rxn x 1
     
@@ -302,6 +283,13 @@ def get_enzyme2regulate(ipolicy, delta_S_metab,delta_S, ccc, KQ, E_regulation, v
         print("in function get_enzyme2regulate")
         print("all errors gone, fully uptimized")
         return -1
+
+#input: current enzyme activities np.array(float) and reaction choice (int)
+#output float
+def calc_new_enzyme_simple(E_vec,React_Choice):
+    current_E = E_vec[React_Choice]
+    new_E = current_E - current_E/5.0
+    return new_E
 
 #use delta_S as args input variable to use method1 (E=E/2) when delta_S_val is small
 def calc_reg_E_step(E_vec, React_Choice, nvar, log_vcounts, 

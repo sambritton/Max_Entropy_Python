@@ -14,17 +14,17 @@ Created on Mon Jul  8 13:48:04 2019
 
 
 #%% Variables to set before use
-v_log_counts_static=[]
-target_v_log_counts=[]
+### STATIC ###
 complete_target_log_counts=[]
 device=[]
 Keq_constant=[]
 f_log_counts=[]
-
 P_mat=[]
 R_back_mat=[]
 S_mat=[]
 delta_increment_for_small_concs=[]
+v_log_counts_static=[]
+target_v_log_counts=[]
 
 nvar=[]
 mu0=[]
@@ -39,8 +39,7 @@ range_of_activity_scale = 1.0
 log_scale_activity = 0.4
 alternative_reward=False
 
-
-#%% use functions 
+#%% used functions 
 import max_entropy_functions
 import numpy as np
 import pandas as pd
@@ -54,14 +53,7 @@ from itertools import repeat
 import torch
 
 
-Method2 = 'dogbox'
-Method1 = 'lm'
-Method3 = 'trf'
-
-#Physically this is trying to minimizing the free energy change in each reaction. 
-def state_value(nn_model, x):
-    
-    #val = nn_model(torch.log(1.0 + torch.exp(range_of_activity_scale*x)))
+def state_value(nn_model, x):    
     
     scale_to_one = np.log(range_of_activity_scale + (1**log_scale_activity))
     x_scaled = (1.0 / scale_to_one) * torch.log(1.0 + (x**log_scale_activity))
@@ -75,13 +67,9 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
                  KQ_f_new, KQ_r_new, E_Regulation_new, E_Regulation_old):
     final_reward=0.0
 
-    #val_old = max_entropy_functions.calc_deltaS_metab(v_log_counts_old, target_v_log_counts)
-    #val_future = max_entropy_functions.calc_deltaS_metab(v_log_counts_future, target_v_log_counts)
-    
+    #here we use the mean for the scaling. The logic is as follows:
     #https://www.xarg.org/2016/06/the-log-sum-exp-trick-in-machine-learning/
 
-    #here we use the mean for the scaling. The logic is as follows:
-    #
     scale_old_max = np.max(v_log_counts_old - target_v_log_counts)
     scale_old_min = np.min(v_log_counts_old - target_v_log_counts)
     scale_old = (scale_old_max + scale_old_min)/2.0
@@ -96,14 +84,10 @@ def reward_value(v_log_counts_future, v_log_counts_old,\
     e_val_future = np.exp(v_log_counts_future - target_v_log_counts - scale_future)
     e_val_future = scale_future  + np.log(np.sum(e_val_future))
 
-    if ( (np.isnan(e_val_future).any()) or (np.isnan(e_val_old).any()) ):
-        print(v_log_counts_future)
-        print(v_log_counts_old)
-
     reward_s = (e_val_old - e_val_future)
     final_reward=reward_s     
     if ((  scale_future_max <=0.0)):
-        #The final reward is meant to maximize the EPR value. However, there was some residual error in ds_metab
+        #The final reward is meant to maximize the EPR value. However, there was some residual error
         #that must be taken into account. We therefore add the last reward_s to the EPR value. 
         
         epr_future = max_entropy_functions.entropy_production_rate(KQ_f_new, KQ_r_new, E_Regulation_new)
@@ -137,19 +121,11 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     states_matrix[:,0] = state_sample
     
     
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method1,
+    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method='lm',
                             xtol=1e-15, 
                             args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
-    if (res_lsq.success==False):
-        print("USING DOGBOX")
-        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method2,
-            bounds=(-500,500),xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
-        if (res_lsq.success==False):
-            print("USING 3rd METHOD")
-            res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_static, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0]))
-    
+
     v_log_counts_matrix[:,0] = res_lsq.x.copy()
-    #v_log_counts_matrix[:,0]=v_log_counts_static.copy()
     log_metabolites = np.append(v_log_counts_matrix[:,0], f_log_counts)
         
     rxn_flux_init = max_entropy_functions.oddsDiff(v_log_counts_matrix[:,0], f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,0])
@@ -157,24 +133,16 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
     
     Keq_inverse = np.power(Keq_constant,-1)
     KQ_r_matrix[:,0] = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs, Keq_inverse,-1);
-    
-    #[RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts_matrix[:,0], f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f_matrix[:,0], KQ_r_matrix[:,0], states_matrix[:,0])
-    #A_init = max_entropy_functions.calc_A(v_log_counts_matrix[:,0], f_log_counts, S_mat, Jac, states_matrix[:,0] )
-    
-    delta_S_metab_matrix[:,0] = max_entropy_functions.calc_deltaS_metab(v_log_counts_matrix[:,0], target_v_log_counts);
         
-    #[ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A_init, S_mat, rxn_flux_init, RR)
-          
+    delta_S_metab_matrix[:,0] = max_entropy_functions.calc_deltaS_metab(v_log_counts_matrix[:,0], target_v_log_counts);
+              
     reward_vec = np.zeros(end_of_path+1)   
     
     reward_vec[0] = 0.0
     rxn_flux_path=rxn_flux_init.copy()
-    #A_path = A_init.copy()
     
     for t in range(0,end_of_path):
-        #breakpoint()
         if (t < end_of_path):
-
             #This represents the choice from the current policy. 
             [React_Choice,reward_vec[t+1],\
             KQ_f_matrix[:,t+1], KQ_r_matrix[:,t+1],\
@@ -196,17 +164,12 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
                 break
 
             rxn_flux_path = max_entropy_functions.oddsDiff(v_log_counts_matrix[:,t+1], f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, states_matrix[:,t+1])
-            
 
             epr_path = max_entropy_functions.entropy_production_rate(KQ_f_matrix[:,t+1], KQ_r_matrix[:,t+1], states_matrix[:,t+1])
-            
-
             sum_reward_episode += reward_vec[t+1]
 
-            #last_state = states_matrix[:,t]
             current_state = states_matrix[:,t+1].copy()
             
-
             #We stop the path if we have no more positive loss function values, or if we revisit a state. 
             if ((delta_S_metab_matrix[:,t+1]<=0.0).all()):
                 end_of_path=t+1 #stops simulation at step t+1
@@ -246,16 +209,12 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
             begin_nn = time.time()
             value_tau = state_value(nn_model, torch.from_numpy(states_matrix[:, tau]).float().to(device) )
             end_nn = time.time()
-            total_time_nn+=end_nn-begin_nn
-            #nn_model.eval()
-            
+            total_time_nn+=end_nn-begin_nn            
 
             if (value_tau.requires_grad == False):
                 breakpoint()
             if (estimate_value.requires_grad == True):
                 estimate_value.detach_()
-            
-
             
             #WARNING
             #loss ordering should be input with requires_grad == True,
@@ -273,7 +232,6 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
             end_nn = time.time()
             total_time_nn+=end_nn-begin_nn
             average_loss.append(loss.item())
-            
 
         if (tau >= (end_of_path-1)):
             break
@@ -287,78 +245,47 @@ def sarsa_n(nn_model, loss_fn, optimizer, scheduler, state_sample, n_back_step, 
 
 
 #%%
-#input state, return action
-    
+#input must be able to determine optimization routine. We need the follwing variables:
+#0: state, type:np.array(float), purpose: current enzyme activities
+#1: v_log_counts, type:np.array(float), purpose:initial guess for optimization
+#2: f_log_counts, type:np.array(float), purpose:fixed metabolites
+#3: mu0, type: , purpose: non as of now
+#4: S_mat, type: np.array(float), purpose: stoichiometric matrix (rxn by matabolites)
+#5: R_back_mat, type: np.array(float), purpose: reverse stoichiometric matrix (rxn by matabolites)
+    #note could be calculated from S_mat: R_back_mat = np.where(S_mat<0, S_mat, 0)
+#6: P_mat, type: np.array(float), purpose: forward stoichiometric matrix (rxn by matabolites), 
+    # note could be calculated from S_mat: P_mat = np.where(S_mat>0,S_mat,0)
+#7: Keq_constant, type: np.array(float), purpose: equilibrium constants
+
+#This function shoud run for each reaction (index = 0 : nrxn-1)
+#It will apply regulation to the state (enzyme activities) and calculate resulting steady state metabolite concentrations
 def potential_step(index, other_args):
     React_Choice=index
     
-    nn_model,state, nvar, v_log_counts, f_log_counts,\
-    complete_target_log_counts, A, rxn_flux, KQ_f,\
-    delta_S_metab,\
+    state, v_log_counts, f_log_counts,\
     mu0, S_mat, R_back_mat, P_mat, \
     delta_increment_for_small_concs, Keq_constant = other_args
     
     
     
-    newE = max_entropy_functions.calc_reg_E_step(state, React_Choice, nvar, v_log_counts, f_log_counts,
-                               complete_target_log_counts, S_mat, A, rxn_flux, KQ_f,\
-                               delta_S_metab)
-
+    newE = max_entropy_functions.calc_new_enzyme_simple(state, React_Choice)
     trial_state_sample = state.copy()#DO NOT MODIFY ORIGINAL STATE
     trial_state_sample[React_Choice] = newE
-        #re-optimize
 
-
-    start_cpu = time.time()
-    new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method1,
+    new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method='lm',
                                 xtol=1e-15, 
                                 args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
                                       delta_increment_for_small_concs, Keq_constant, trial_state_sample))
-    if (new_res_lsq.success==False):
-        print("USING DOGBOX")
-        print("v_log_counts")
-        print(v_log_counts)
-        print("trial_state_sample")
-        print(trial_state_sample)
-        new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method2,
-            bounds=(-500,500), xtol=1e-15, 
-            args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
-            delta_increment_for_small_concs, Keq_constant, trial_state_sample))
-        if (new_res_lsq.success==False):
-            new_res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts, method=Method3,xtol=1e-15, 
-            args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, 
-            delta_increment_for_small_concs, Keq_constant, trial_state_sample))
-    
-    end_cpu = time.time()
 
     new_v_log_counts = new_res_lsq.x
     
-    new_log_metabolites = np.append(new_v_log_counts, f_log_counts)
-
-    new_delta_S_metab = max_entropy_functions.calc_deltaS_metab(new_v_log_counts, target_v_log_counts)
-
-    KQ_f_new = max_entropy_functions.odds(new_log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);    
-    Keq_inverse = np.power(Keq_constant,-1)
-    KQ_r_new = max_entropy_functions.odds(new_log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
-
-
+    #minimal output is the new steady state concentrations. We can recalculate the trial_state_sample to avoid sending it out
+    return [new_v_log_counts]
     
-    begin_nn = time.time()
-    value_current_state = state_value(nn_model,  torch.from_numpy(trial_state_sample).float().to(device) )
-    value_current_state = value_current_state.item()
-
-    end_nn = time.time()
-    current_reward = reward_value(new_v_log_counts, v_log_counts, \
-                                  KQ_f_new, KQ_r_new,\
-                                  trial_state_sample, state)
-
-    action_value = current_reward + (gamma) * value_current_state #note, action is using old KQ values
-
-    return [action_value, current_reward,KQ_f_new,KQ_r_new,new_v_log_counts,trial_state_sample,new_delta_S_metab, end_cpu-start_cpu,end_nn-begin_nn,value_current_state]
-    
+#%%policy inputs states->actions. 
+#here, taking an action corresponds to finding new steady state metabolite concentrations and other variables related to them.
 def policy_function(nn_model, state, v_log_counts_path, *args ):
     #last input argument should be epsilon for use when using greedy-epsilon algorithm. 
-    
     varargin = args
     nargin = len(varargin)
     epsilon_greedy = 0.0
@@ -366,150 +293,119 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         epsilon_greedy = varargin[0]
         
     used_random_step=False
+    
     rxn_choices = [i for i in range(num_rxns)]
-    
-    res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method1,
-                            xtol=1e-15, 
-                            args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
-    if (res_lsq.success==False):
-        print("USING DOGBOX")
-        print("v_log_counts_path")
-        print(v_log_counts_path)
-        print("state")
-        print(state)
-        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method2,
-            bounds=(-500,500),xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
-        if (res_lsq.success==False):
-            res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method=Method3,xtol=1e-15, args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
-    
-
-    #v_log_counts = v_log_counts_path.copy()
-    v_log_counts = res_lsq.x
-         
-    log_metabolites = np.append(v_log_counts, f_log_counts)
         
-    rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state)
-    KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
-    Keq_inverse = np.power(Keq_constant,-1)
-    KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
-    
-    [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, state)
-    A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, state )
-    
-    
-    delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts, target_v_log_counts)
-    
-    [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
-    
-    indices = [i for i in range(0,len(Keq_constant))]
-    action_value_vec = np.zeros(num_rxns)
-    current_reward_vec = np.zeros(num_rxns)
-    current_state_vec = np.zeros(num_rxns)
+    unif_rand = np.random.uniform(0,1)
+    if ( (unif_rand < epsilon_greedy) and (len(rxn_choices) > 0)):
+        used_random_step=True
+        random_choice = random.choice(rxn_choices)
+        final_action = random_choice
+        used_random_step=1
 
-    variables=[nn_model,state, nvar, v_log_counts, f_log_counts,\
-               complete_target_log_counts, A, rxn_flux, KQ_f,\
-               delta_S_metab,\
-               mu0, S_mat, R_back_mat, P_mat, 
-               delta_increment_for_small_concs, Keq_constant]
+        res_lsq = least_squares(max_entropy_functions.derivatives, v_log_counts_path, method='lm',
+                        xtol=1e-15, 
+                        args=(f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state))
 
-    start = time.time()
-    
-    with Pool() as pool:
-        async_result = pool.starmap(potential_step, zip(indices, repeat(variables)))
-        pool.close()
-        pool.join()
-    end = time.time()
-    
-    total = end-start
-    #only choose from non penalty rewards     
-    time_cpu=0
-    time_nn=0   
-    for act in range(0,len(async_result)):
-        if (async_result[act][1] == penalty_exclusion_reward):
-            rxn_choices.remove(act)
-        action_value_vec[act] = async_result[act][0]
-        current_reward_vec[act] = async_result[act][1]
-        time_cpu+=async_result[act][7]
-        time_nn+=async_result[act][8]
-        current_state_vec[act] = async_result[act][9]
-    #print(current_reward_vec)
-    
-    if (len(rxn_choices) == 0):
-        print("OUT OF REWARDS")
-        action_choice=-1
+
+        final_v_log_counts = res_lsq.x
+        
+        new_log_metabolites = np.append(final_v_log_counts, f_log_counts)
+        final_state = state.copy()
+        newE = max_entropy_functions.calc_new_enzyme_simple(state, final_action)
+        final_state = state.copy()#DO NOT MODIFY ORIGINAL STATE
+        final_state[final_action] = newE
+
+
+        final_delta_s_metab = max_entropy_functions.calc_deltaS_metab(final_v_log_counts, target_v_log_counts)
+        final_KQ_f = max_entropy_functions.odds(new_log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant)
+        Keq_inverse = np.power(Keq_constant,-1)
+        final_KQ_r = max_entropy_functions.odds(new_log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1)
+        
+        value_current_state = state_value(nn_model,  torch.from_numpy(final_state).float().to(device) )
+        value_current_state = value_current_state.item()
+        final_reward = reward_value(final_v_log_counts, v_log_counts_path, \
+                                    final_KQ_f, final_KQ_r,\
+                                    final_state, state)
+
     else:
-        try:
-            action_choice_index = np.random.choice(np.flatnonzero(action_value_vec[rxn_choices] == action_value_vec[rxn_choices].max()))
-            action_choice = rxn_choices[action_choice_index]
-        except:
-            print("WARNING ERROR SHOULD NOT BE HAPPINING")
-            print("rxn_choices")
-            print(rxn_choices)
-            print("action_value_vec")
-            print(action_value_vec)
-            print("action_value_vec[rxn_choices].max()")
-            print(action_value_vec[rxn_choices].max())
-            print(np.flatnonzero(action_value_vec[rxn_choices] == action_value_vec[rxn_choices].max()))
-            print("current_reward_vec")
-            print(current_reward_vec)
-            print("current_state_vec")
-            print(current_state_vec)
+        #In this, we must choose base on the best prediction base on environmental feedback
+
+        v_log_counts = v_log_counts_path
             
-            print("MAXIMUM LAYER WEIGHTS")
-            for layer in nn_model.modules():
-                try:
-                    print(torch.max(layer.weight))
-                except:
-                    print("")
+        log_metabolites = np.append(v_log_counts, f_log_counts)
+            
+        rxn_flux = max_entropy_functions.oddsDiff(v_log_counts, f_log_counts, mu0, S_mat, R_back_mat, P_mat, delta_increment_for_small_concs, Keq_constant, state)
+        KQ_f = max_entropy_functions.odds(log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant)
+        Keq_inverse = np.power(Keq_constant,-1)
+        KQ_r = max_entropy_functions.odds(log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1)
+        
+        [RR,Jac] = max_entropy_functions.calc_Jac2(v_log_counts, f_log_counts, S_mat, delta_increment_for_small_concs, KQ_f, KQ_r, state)
+        A = max_entropy_functions.calc_A(v_log_counts, f_log_counts, S_mat, Jac, state )
+        
+        
+        delta_S_metab = max_entropy_functions.calc_deltaS_metab(v_log_counts, target_v_log_counts)
+        
+        [ccc,fcc] = max_entropy_functions.conc_flux_control_coeff(nvar, A, S_mat, rxn_flux, RR)
+        
+        indices = [i for i in range(0,len(Keq_constant))]
 
-            print("async_result")
-            print(async_result)
-            action_choice = -1
+        #minimal varialbes to run optimization
+        variables=[state, v_log_counts, f_log_counts,\
+                mu0, S_mat, R_back_mat, P_mat, 
+                delta_increment_for_small_concs, Keq_constant]
+        
+        with Pool() as pool:
+            async_result = pool.starmap(potential_step, zip(indices, repeat(variables)))
+            pool.close()
+            pool.join()
+        end = time.time()
+        
+        temp_action_value = -np.inf
+        for act in range(0,len(async_result)):
 
-        unif_rand = np.random.uniform(0,1)
-        if ( (unif_rand < epsilon_greedy) and (len(rxn_choices) > 0)):
-            #if (len(rxn_choices)>1):
-            #    rxn_choices.remove(action_choice)
-            #print("USING EPSILON GREEDY")
-            #print(action_choice)       
-            used_random_step=True
-            random_choice = random.choice(rxn_choices)
-            action_choice = random_choice
-            used_random_step=1
+            new_v_log_counts = async_result[act][0] #output from pool
+            new_log_metabolites = np.append(new_v_log_counts, f_log_counts)
 
-    if (np.sum(np.abs(v_log_counts - v_log_counts_path)) > 0.1):
-        print("ERROR IN POLICY V_COUNT OPTIMIZATION")
-        #print("async_result")
-        #print(async_result)
-        print("state")
-        print(state)
-        print("v_log_counts")
-        print(v_log_counts)
-        print("v_log_counts_path")
-        print(v_log_counts_path)
-        print("current_reward_vec")
-        print(current_reward_vec)
-        print("action_value_vec")
-        print(action_value_vec)
-        print("rxn_choices")
-        print(rxn_choices)
-        print("MAXIMUM LAYER WEIGHTS")
-        for layer in nn_model.modules():
-            try:
-                print(torch.max(layer.weight))
-            except:
-                print("")
+            trial_state_sample = state.copy()
 
+            newE = max_entropy_functions.calc_new_enzyme_simple(state, act)
+            trial_state_sample = state.copy()#DO NOT MODIFY ORIGINAL STATE
+            trial_state_sample[act] = newE
+            new_delta_S_metab = max_entropy_functions.calc_deltaS_metab(new_v_log_counts, target_v_log_counts)
 
+            KQ_f_new = max_entropy_functions.odds(new_log_metabolites, mu0,S_mat, R_back_mat, P_mat, delta_increment_for_small_concs,Keq_constant);
+            KQ_r_new = max_entropy_functions.odds(new_log_metabolites, mu0,-S_mat, P_mat, R_back_mat, delta_increment_for_small_concs,Keq_inverse,-1);
+            
+            value_current_state = state_value(nn_model,  torch.from_numpy(trial_state_sample).float().to(device) )
+            value_current_state = value_current_state.item()
 
+            current_reward = reward_value(new_v_log_counts, v_log_counts, \
+                                        KQ_f_new, KQ_r_new,\
+                                        trial_state_sample, state)
 
-    #async_result order
-    #[action_value, current_reward,KQ_f_new,KQ_r_new,new_v_log_counts,trial_state_sample,new_delta_S_metab]
-    return [action_choice,async_result[action_choice][1],\
-            async_result[action_choice][2],async_result[action_choice][3],\
-            async_result[action_choice][4],\
-            async_result[action_choice][5],\
-            async_result[action_choice][6],used_random_step,time_cpu,time_nn]
+            action_value = current_reward + (gamma) * value_current_state
+
+            if (action_value > temp_action_value):
+                #then a new action is the best. 
+                temp_action_value = action_value
+
+                #set best output variables 
+                final_action = act
+                final_reward = current_reward
+                final_KQ_f = KQ_f_new
+                final_KQ_r = KQ_r_new
+                final_v_log_counts = new_v_log_counts
+                final_state = trial_state_sample
+                final_delta_s_metab = new_delta_S_metab
+
+    return [final_action,\
+            final_reward,\
+            final_KQ_f,\
+            final_KQ_r,\
+            final_v_log_counts,\
+            final_state,\
+            final_delta_s_metab,used_random_step,0.0,0.0]
             
     
     
