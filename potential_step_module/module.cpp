@@ -18,7 +18,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/eigen.h>
 
-#include <Eigen/LU>
+#include <Eigen/Dense>
 
 #include "helper_functions.hpp"
 
@@ -39,8 +39,7 @@ namespace py = pybind11;
  *  7: Keq_constant, type: np.array(float), purpose: equilibrium constants
  *
  */
-[[nodiscard]]
-int potential_step(
+void potential_step(
         const int index,
         Eigen::VectorXd& state,
         const Eigen::VectorXd& v_log_counts,
@@ -49,7 +48,9 @@ int potential_step(
         const Eigen::VectorXd& S_mat,
         const Eigen::VectorXd& R_back_mat,
         const Eigen::VectorXd& P_mat,
-        const Eigen::VectorXd& Keq_constant)
+        const Eigen::VectorXd& Keq_constant,
+        double* returns,
+        int tid)
 {
     (void) index;
     (void) state;
@@ -60,7 +61,8 @@ int potential_step(
     (void) R_back_mat;
     (void) P_mat;
     (void) Keq_constant;
-    std::cout << "Potential step being calculated...\n";
+    std::cout << "--- tid<" << tid << "> potential step being calculated...\n";
+    P_mat << "This should fail!!";
     /*
      *  This function shoud run for each reaction (index = 0 : nrxn-1)
      *  It will apply regulation to the state (enzyme activities) 
@@ -69,7 +71,7 @@ int potential_step(
 
     state[index] = calc_new_enzyme_simple(state, index);
 
-    Eigen::VectorXd result = least_squares(
+    Eigen::Vector2d result = least_squares(
             v_log_counts,
             1e-15,
             f_log_counts,
@@ -87,12 +89,9 @@ int potential_step(
      *      mu0, S_mat, R_back_mat, P_mat, \
      *      delta_increment_for_small_concs, Keq_constant = other_args
      *      
-     *      
-     *      
      *      newE = max_entropy_functions.calc_new_enzyme_simple(state, React_Choice)
      *      trial_state_sample = state.copy()#DO NOT MODIFY ORIGINAL STATE
      *      trial_state_sample[React_Choice] = newE
-
      *      new_res_lsq = least_squares(
      *              max_entropy_functions.derivatives, v_log_counts, method='lm',
      *              xtol=1e-15, 
@@ -107,14 +106,9 @@ int potential_step(
      *                  trial_state_sample
      *              )
      *          )
-
-     *      new_v_log_counts = new_res_lsq.x
-     *      
-     *      minimal output is the new steady state concentrations.
-     *      We can recalculate the trial_state_sample to avoid sending it out
-     *      return [new_v_log_counts]
      */
-    return 0;
+    returns[tid] = result(0);
+    std::cout << "Returning from tid<" << tid << ">\n";
 }
 
 
@@ -131,12 +125,13 @@ void dispatch(const std::vector<int>& indices, std::vector<Eigen::VectorXd>& var
     const Eigen::VectorXd& Keq_constant = variables[7];
     const int n_threads = indices.size();
 
+    double* returns = (double*)malloc(sizeof(double) * n_threads);
     std::vector<std::thread> handles(n_threads);
-    for (int i=0; i<n_threads; i++)
+    for (int tid=0; tid<n_threads; tid++)
     {
-        handles[i] = std::thread(
+        handles[tid] = std::thread(
                 potential_step,
-                indices[i],
+                indices[tid],
                 std::ref(state),
                 std::ref(v_log_counts),
                 std::ref(f_log_counts),
@@ -144,7 +139,9 @@ void dispatch(const std::vector<int>& indices, std::vector<Eigen::VectorXd>& var
                 std::ref(S_mat),
                 std::ref(R_back_mat),
                 std::ref(P_mat),
-                std::ref(Keq_constant)
+                std::ref(Keq_constant),
+                returns,
+                tid
             );
     }
 

@@ -81,6 +81,7 @@ if [ "$BUILD" -eq "1" ]; then
     pushd eigen3
     git checkout 3.3
     cp -r ./Eigen/ "$MODDIR/include"
+    cp -r ./unsupported/ "$MODDIR/include"
     error_check 'installing eigen3'
     popd
 
