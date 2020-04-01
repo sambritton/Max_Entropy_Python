@@ -78,14 +78,11 @@ if [ "$BUILD" -eq "1" ]; then
     echo Installing Eigen headers...
     echo
 
-    if [ -d "$MODDIR/include/Eigen" ]; then
-        echo
-        echo Headers already installed.
-        echo
-    else
-        cp -r eigen3/Eigen/ "$MODDIR/include"
-        error_check 'installing eigen3'
-    fi
+    pushd eigen3
+    git checkout 3.3
+    cp -r ./Eigen/ "$MODDIR/include"
+    error_check 'installing eigen3'
+    popd
 
     echo
     echo Checking pybind11 installation...

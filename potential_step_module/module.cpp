@@ -15,70 +15,142 @@
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/numpy.h>
+#include <pybind11/eigen.h>
 
-#include "max_entropy_functions.hpp"
+#include <Eigen/LU>
+
+#include "helper_functions.hpp"
 
 namespace py = pybind11;
 
-constexpr int potential_step()
+/*
+ *  %%
+ *  input must be able to determine optimization routine. We need the follwing variables:
+ *  0: state, type:np.array(float), purpose: current enzyme activities
+ *  1: v_log_counts, type:np.array(float), purpose:initial guess for optimization
+ *  2: f_log_counts, type:np.array(float), purpose:fixed metabolites
+ *  3: mu0, type: , purpose: non as of now
+ *  4: S_mat, type: np.array(float), purpose: stoichiometric matrix (rxn by matabolites)
+ *  5: R_back_mat, type: np.array(float), purpose: reverse stoichiometric matrix (rxn by matabolites)
+ *         #note could be calculated from S_mat: R_back_mat = np.where(S_mat<0, S_mat, 0)
+ *  6: P_mat, type: np.array(float), purpose: forward stoichiometric matrix (rxn by matabolites), 
+ *         # note could be calculated from S_mat: P_mat = np.where(S_mat>0,S_mat,0)
+ *  7: Keq_constant, type: np.array(float), purpose: equilibrium constants
+ *
+ */
+[[nodiscard]]
+int potential_step(
+        const int index,
+        Eigen::VectorXd& state,
+        const Eigen::VectorXd& v_log_counts,
+        const Eigen::VectorXd& f_log_counts,
+        const Eigen::VectorXd& mu0,
+        const Eigen::VectorXd& S_mat,
+        const Eigen::VectorXd& R_back_mat,
+        const Eigen::VectorXd& P_mat,
+        const Eigen::VectorXd& Keq_constant)
 {
+    (void) index;
+    (void) state;
+    (void) v_log_counts;
+    (void) f_log_counts;
+    (void) mu0;
+    (void) S_mat;
+    (void) R_back_mat;
+    (void) P_mat;
+    (void) Keq_constant;
+    std::cout << "Potential step being calculated...\n";
     /*
-    newE = max_entropy_functions.calc_reg_E_step(
-            state
-            React_Choice
-            nvar
-            v_log_counts
-            f_log_counts
-            complete_target_log_counts
-            S_mat
-            A
-            rxn_flux
-            KQ_f
-            delta_S_metab)
-            */
+     *  This function shoud run for each reaction (index = 0 : nrxn-1)
+     *  It will apply regulation to the state (enzyme activities) 
+     *  and calculate resulting steady state metabolite concentrations
+     */
+
+    state[index] = calc_new_enzyme_simple(state, index);
+
+    Eigen::VectorXd result = least_squares(
+            v_log_counts,
+            1e-15,
+            f_log_counts,
+            mu0,
+            S_mat,
+            R_back_mat,
+            P_mat, 
+            Keq_constant,
+            state);
+    /*
+     *  def potential_step(index, other_args):
+     *      React_Choice=index
+     *      
+     *      state, v_log_counts, f_log_counts,\
+     *      mu0, S_mat, R_back_mat, P_mat, \
+     *      delta_increment_for_small_concs, Keq_constant = other_args
+     *      
+     *      
+     *      
+     *      newE = max_entropy_functions.calc_new_enzyme_simple(state, React_Choice)
+     *      trial_state_sample = state.copy()#DO NOT MODIFY ORIGINAL STATE
+     *      trial_state_sample[React_Choice] = newE
+
+     *      new_res_lsq = least_squares(
+     *              max_entropy_functions.derivatives, v_log_counts, method='lm',
+     *              xtol=1e-15, 
+     *              args=(
+     *                  f_log_counts,
+     *                  mu0,
+     *                  S_mat,
+     *                  R_back_mat,
+     *                  P_mat, 
+     *                  delta_increment_for_small_concs,
+     *                  Keq_constant,
+     *                  trial_state_sample
+     *              )
+     *          )
+
+     *      new_v_log_counts = new_res_lsq.x
+     *      
+     *      minimal output is the new steady state concentrations.
+     *      We can recalculate the trial_state_sample to avoid sending it out
+     *      return [new_v_log_counts]
+     */
     return 0;
 }
 
-/**
- * @inputs:
- * - current state of NN
- * - num_reactions (len of KQ)
- *
- */
-void dispatch(const std::vector<int>& indices, py::dict variables) {
 
-    /* Mutable * /
-    auto nn_model		                = variables["nn_model"];
-    auto state		                    = variables["state"];
-    auto v_log_counts		            = variables["v_log_counts"];
-    auto A		                        = variables["A"];
-    auto rxn_flux		                = variables["rxn_flux"];
-    auto delta_S_metab 		            = variables["delta_S_metab"];
-    auto KQ_f 		                    = variables["KQ_f"];
-    // -- */
+void dispatch(const std::vector<int>& indices, std::vector<Eigen::VectorXd>& variables)
+{
+    assert(variables.size() == 8 && "Did you pass in all 8 variables as numpy arrays?");
+    Eigen::VectorXd& state 		= variables[0];
+    const Eigen::VectorXd& v_log_counts = variables[1];
+    const Eigen::VectorXd& f_log_counts = variables[2];
+    const Eigen::VectorXd& mu0 			= variables[3];
+    const Eigen::VectorXd& S_mat 		= variables[4];
+    const Eigen::VectorXd& R_back_mat 	= variables[5];
+    const Eigen::VectorXd& P_mat 		= variables[6];
+    const Eigen::VectorXd& Keq_constant = variables[7];
+    const int n_threads = indices.size();
 
-    /* Unused... * /
-    const auto mu0		                        = variables["mu0"];
-    const auto delta_increment_for_small_concs	= variables["delta_increment_for_small_concs"];
-    // -- */
-
-    /* Constants: * /
-    const auto f_log_counts 		            = variables["f_log_counts"];
-    const auto nvar		                        = variables["nvar"];
-    const auto complete_target_log_counts		= variables["complete_target_log_counts"];
-    const auto Keq_constant		                = variables["Keq_constant"];
-
-    const auto S_mat		                    = variables["S_mat"];
-    const auto R_back_mat		                = variables["R_back_mat"];
-    const auto P_mat 		                    = variables["P_mat"];
-    // -- */
-
-    for (const auto& el : variables)
+    std::vector<std::thread> handles(n_threads);
+    for (int i=0; i<n_threads; i++)
     {
-        std::cout << "Got key " << el.first << " with type " << typeid(el.first).name() << "\n";
-        std::cout << "and value " << el.second << " with type " << typeid(el.second).name() << "\n\n";
+        handles[i] = std::thread(
+                potential_step,
+                indices[i],
+                std::ref(state),
+                std::ref(v_log_counts),
+                std::ref(f_log_counts),
+                std::ref(mu0),
+                std::ref(S_mat),
+                std::ref(R_back_mat),
+                std::ref(P_mat),
+                std::ref(Keq_constant)
+            );
     }
 
+    for (auto& th : handles) th.join();
+
+    std::cout << "Graceful exit...\n";
     /*
      * which level of granularity of parallelism
      * will best suit the problem?
