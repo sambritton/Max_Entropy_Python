@@ -5,6 +5,17 @@
 #include <Eigen/Dense>
 #include <unsupported/Eigen/NonLinearOptimization>
 
+static constexpr CPP98      = 199711;
+static constexpr GCC98      = 199711;
+static constexpr CPP11      = 201103;
+static constexpr GNU11      = 201103;
+static constexpr CPP14      = 201402;
+static constexpr GNU14      = 201402;
+static constexpr CPP1z      = 201500;
+static constexpr CPP17      = 201500;
+static constexpr MY_CPP_STD = __cplusplus;
+static constexpr n_threads  = 8;
+
 static constexpr double init_x = 0.001;
 
 template<typename _Scalar, int NX=Dynamic, int NY=Dynamic>
@@ -30,37 +41,31 @@ struct Functor
 
 struct LMFunctor : Functor<double>
 {
+    /*
+     * See eigen3/unsupported/test/levenberg_marquardt.cpp
+     * for an example of using this API.
+     */
 //  void operator() (const InputType& x, ValueType* v, JacobianType* _j=0) const;
     LMFunctor(const int xdim, const int ydim): Functor<double>(xdim, ydim) {}
 
     int operator()(const Eigen::VectorXd &x, Eigen::VectorXd &fvec) const
     {
-        double tmp1, tmp2, tmp3;
-        static const double y[15] = {1.4e-1, 1.8e-1, 2.2e-1, 2.5e-1, 2.9e-1, 3.2e-1, 3.5e-1,
-            3.9e-1, 3.7e-1, 5.8e-1, 7.3e-1, 9.6e-1, 1.34, 2.1, 4.39};
-
         for (int i = 0; i < values(); i++)
         {
-            tmp1 = i+1;
-            tmp2 = 16 - i - 1;
-            tmp3 = (i>=8)? tmp2 : tmp1;
-            fvec[i] = y[i] - (x[0] + tmp1/(x[1]*tmp2 + x[2]*tmp3));
+		    /*
+			 *  Calculate f(x) here
+		     */
         }
         return 0;
     }
 
     int df(const Eigen::VectorXd &x, Eigen::MatrixXd &fjac) const
     {
-        double tmp1, tmp2, tmp3, tmp4;
         for (int i = 0; i < values(); i++)
         {
-            tmp1 = i+1;
-            tmp2 = 16 - i - 1;
-            tmp3 = (i>=8)? tmp2 : tmp1;
-            tmp4 = (x[1]*tmp2 + x[2]*tmp3); tmp4 = tmp4*tmp4;
-            fjac(i,0) = -1;
-            fjac(i,1) = tmp1*tmp2/tmp4;
-            fjac(i,2) = tmp1*tmp3/tmp4;
+            /*
+             * Calculate dx and place in the jacobian of f
+             */
         }
         return 0;
     }

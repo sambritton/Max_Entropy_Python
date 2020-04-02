@@ -114,8 +114,14 @@ void potential_step(
 
 void dispatch(const std::vector<int>& indices, std::vector<Eigen::VectorXd>& variables)
 {
+    if constexpr (MY_CPP_STD < CPP11)
+    {
+        Eigen::initParallel();
+    }
+    Eigen::setNbThreads(n_threads);
+
     assert(variables.size() == 8 && "Did you pass in all 8 variables as numpy arrays?");
-    Eigen::VectorXd& state 		= variables[0];
+    Eigen::VectorXd& state 		        = variables[0];
     const Eigen::VectorXd& v_log_counts = variables[1];
     const Eigen::VectorXd& f_log_counts = variables[2];
     const Eigen::VectorXd& mu0 			= variables[3];
