@@ -5,6 +5,8 @@
 #include <Eigen/Dense>
 #include <unsupported/Eigen/NonLinearOptimization>
 
+static constexpr double init_x = 0.001;
+
 template<typename _Scalar, int NX=Dynamic, int NY=Dynamic>
 struct Functor
 {
@@ -13,9 +15,9 @@ struct Functor
     InputsAtCompileTime = NX,
     ValuesAtCompileTime = NY
   };
-  typedef Matrix<Scalar,InputsAtCompileTime,1> InputType;
-  typedef Matrix<Scalar,ValuesAtCompileTime,1> ValueType;
-  typedef Matrix<Scalar,ValuesAtCompileTime,InputsAtCompileTime> JacobianType;
+  typedef Eigen::Matrix<Scalar,InputsAtCompileTime,1> InputType;
+  typedef Eigen::Matrix<Scalar,ValuesAtCompileTime,1> ValueType;
+  typedef Eigen::Matrix<Scalar,ValuesAtCompileTime,InputsAtCompileTime> JacobianType;
 
   const int m_inputs, m_values;
 
@@ -29,9 +31,9 @@ struct Functor
 struct LMFunctor : Functor<double>
 {
 //  void operator() (const InputType& x, ValueType* v, JacobianType* _j=0) const;
-    LMFunctor(void): Functor<double>(3,15) {}
+    LMFunctor(const int xdim, const int ydim): Functor<double>(xdim, ydim) {}
 
-    int operator()(const VectorXd &x, VectorXd &fvec) const
+    int operator()(const Eigen::VectorXd &x, Eigen::VectorXd &fvec) const
     {
         double tmp1, tmp2, tmp3;
         static const double y[15] = {1.4e-1, 1.8e-1, 2.2e-1, 2.5e-1, 2.9e-1, 3.2e-1, 3.5e-1,
@@ -47,7 +49,7 @@ struct LMFunctor : Functor<double>
         return 0;
     }
 
-    int df(const VectorXd &x, Eigen::MatrixXd &fjac) const
+    int df(const Eigen::VectorXd &x, Eigen::MatrixXd &fjac) const
     {
         double tmp1, tmp2, tmp3, tmp4;
         for (int i = 0; i < values(); i++)
@@ -113,7 +115,7 @@ double derivatives(
     const Eigen::VectorXd log_metabolites(v_log_counts.size() + f_log_counts.size());
     log_metabolites << v_log_counts, f_log_counts;
 
-    EKQ_f = odds_alternate(
+    Eigen::VectorXd EKQ_f = odds_alternate(
             E_regulation,
             log_metabolites,
             mu0,
@@ -156,9 +158,9 @@ Eigen::Vector2d least_squares(
 {
     Eigen::Vector2d x;
     static constexpr int n = 3;
-    x.setConstant(n, 1.);
+    x.setConstant(n, init_x);
     LMFunctor lmfn;
-    LevenbergMarquardt<LMFunctor> lm(lmfn);
+    Eigen::LevenbergMarquardt<LMFunctor> lm(lmfn);
     lm.minimize(x);
 
     return x;
