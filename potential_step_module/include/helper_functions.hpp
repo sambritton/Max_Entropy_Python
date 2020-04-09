@@ -5,6 +5,8 @@
 #include <Eigen/Dense>
 #include <unsupported/Eigen/NonLinearOptimization>
 
+using namespace Eigen;
+
 static constexpr CPP98      = 199711;
 static constexpr GCC98      = 199711;
 static constexpr CPP11      = 201103;
@@ -18,132 +20,113 @@ static constexpr n_threads  = 8;
 
 static constexpr double init_x = 0.001;
 
-template<typename _Scalar, int NX=Dynamic, int NY=Dynamic>
-struct Functor
+struct lmder_functor : DenseFunctor<double>
 {
-  typedef _Scalar Scalar;
-  enum {
-    InputsAtCompileTime = NX,
-    ValuesAtCompileTime = NY
-  };
-  typedef Eigen::Matrix<Scalar,InputsAtCompileTime,1> InputType;
-  typedef Eigen::Matrix<Scalar,ValuesAtCompileTime,1> ValueType;
-  typedef Eigen::Matrix<Scalar,ValuesAtCompileTime,InputsAtCompileTime> JacobianType;
+    MatrixXd S;
+    MatrixXd R;
+    MatrixXd P;
+    VectorXd Keq_constant;
+    VectorXd E_Regulation;
+    VectorXd log_fcounts;
 
-  const int m_inputs, m_values;
-
-  Functor() : m_inputs(InputsAtCompileTime), m_values(ValuesAtCompileTime) {}
-  Functor(int inputs, int values) : m_inputs(inputs), m_values(values) {}
-
-  int inputs() const { return m_inputs; }
-  int values() const { return m_values; }
-};
-
-struct LMFunctor : Functor<double>
-{
-    /*
-     * See eigen3/unsupported/test/levenberg_marquardt.cpp
-     * for an example of using this API.
-     */
-//  void operator() (const InputType& x, ValueType* v, JacobianType* _j=0) const;
-    LMFunctor(const int xdim, const int ydim): Functor<double>(xdim, ydim) {}
-
-    int operator()(const Eigen::VectorXd &x, Eigen::VectorXd &fvec) const
+    lmder_functor(
+        MatrixXd& _S,
+        MatrixXd& _R, 
+        MatrixXd& _P,
+        VectorXd& _Keq_constant,
+        VectorXd& _E_Regulation,
+        VectorXd& _log_fcounts):
+        S(_S),
+        R(_R),
+        P(_P),
+        Keq_constant(_Keq_constant),
+        E_Regulation(_E_Regulation),
+        log_fcounts(_log_fcounts) {}
+   
+    
+    int operator()(const VectorXd& log_vcounts, VectorXd& deriv) const
     {
-        for (int i = 0; i < values(); i++)
-        {
-		    /*
-			 *  Calculate f(x) here
-		     */
+        //this function should be derivs
+    
+        int nrxns = S.rows();
+        int nvar = log_vcounts.rows();//make sure this is length and not 1
+        int metabolite_count = S.cols();
+        
+
+        VectorXd log_metabolites = (log_vcounts,log_fcounts); //should be constructed from vectors concatonated together. Not sure how to do that. 
+
+        VectorXd log_Q_inv = -1.0 * ( (R * log_metabolites) + (P * log_metabolites));
+        VectorXd log_Q = 1.0 * ( (P * log_metabolites) + (R * log_metabolites));
+
+        VectorXd EKQ_f(nrxns);  //allocate. can break down to one vector but leave as two for clarity right now. 
+        VectorXd EKQ_r(nrxns);    
+
+        for (int rxn=0; rnx < nrxns; rxn++){
+            double Q_inv_rxn = exp(log_Q_inv(rxn));
+            double ekq_f = E_Regulation(rxn) * Keq_constant(rxn) * Q_inv_rxn;
+            
+            EKQ_f(rxn) = ekq_f;
+
+            double Q_rxn = exp(log_Q(rxn));
+            double ekq_r = E_Regulation(rxn) * pow(Keq_constant(rxn),-1.0) * Q_rxn; 
+            EKQ_r(rxn) = ekq_r;
         }
+
+        S.resize(nrxns,nvar); //take all rows (reactions) and only variable columns.
+
+        //(nvar x 1) <=(nvar x nrxns) * (nrxns x 1)
+        deriv = (S.transpose()) * (EKQ_f - EKQ_r);
         return 0;
     }
 
-    int df(const Eigen::VectorXd &x, Eigen::MatrixXd &fjac) const
-    {
-        for (int i = 0; i < values(); i++)
-        {
-            /*
-             * Calculate dx and place in the jacobian of f
-             */
+    
+    //WARNING  jacobian should be calculated wrt metabolite concentration, not log(concentration). 
+    int df(const VectorXd &log_vcounts, MatrixXd &fjac) const {
+        //this should be a numerical jacobian
+        //Jac is the Jacobian matrix, 
+        //an N metabolite time-differential equations by (rows) by 
+        //N metabolites derivatives (columns)
+        //J_ij = d/dx_i(df_j/dt)
+
+        int nrxns = S.rows();
+        int nvar = log_vcounts.rows();//make sure this is length and not 1
+        int metabolite_count = S.cols();
+
+        //WARNING Only use to calcualte KQ
+        VectorXd log_metabolites = (log_vcounts,log_fcounts); //should be constructed from vectors concatonated together. Not sure how to do that. 
+        
+        VectorXd metabolites = exp(log_metabolites); //should be constructed from vectors concatonated together. Not sure how to do that. 
+        VectorXd metabolites_recip = pow(metabolites, -1.0);
+
+        //nrxn x metabolite_count <= component product from:  (metabolite_count x 1) * (nrxn x metabolite_count)
+        VectorXd S_recip_metab = metabolite_count.cwiseProduct( (-1.0 * S) );
+        
+        VectorXd log_Q_inv = -1.0 * ( (R * log_metabolites) + (P * log_metabolites));
+        VectorXd log_Q = 1.0 * ( (P * log_metabolites) + (R * log_metabolites));
+
+        VectorXd x(nrxns);
+
+        for (int rxn=0; rnx < nrxns; rxn++){
+            double Q_inv_rxn = exp(log_Q_inv(rxn));
+            double ekq_f = E_Regulation(rxn) * Keq_constant(rxn) * Q_inv_rxn;
+            
+            double Q_rxn = exp(log_Q(rxn));
+            double ekq_r = E_Regulation(rxn) * pow(Keq_constant(rxn),-1.0) * Q_rxn; 
+
+            x(rxn) = ekq_f + ekq_r;
         }
+   
+        //nrxn x metabolite_count <= component (nrxn x 1 ) * (nrxn x metabolite_count), but not sure how cwiseProduce is working. 
+        //maybe need to do (x.transpose()).cwiseProduce(S_recip_metab.transpose()).transpose()
+        MatrixXd y = x.cwiseProduct(S_recip_metab).transpose();
+
+        //metabolite_count x metabolite_count <= (metabolite_count x nrxn) * (nrxn x metabolite_count)
+        fjac = (S.transpose()) * y;
+
         return 0;
     }
-};
-
-[[nodiscard]]
-constexpr auto odds_alternate(
-            const Eigen::VectorXd& E_regulation,
-            const Eigen::VectorXd& log_metabolites,
-            const Eigen::VectorXd& mu0,
-            const Eigen::VectorXd& S_mat,
-            const Eigen::VectorXd& R_back_mat,
-            const Eigen::VectorXd& P_mat, 
-            const Eigen::VectorXd& Keq_constant,
-            const int direction=1) -> double
-{
-    Eigen::VectorXd log_Q_inv = -direction * (R_back_mat.dot(log_metabolites) + P_mat.dot(log_metabolites));
-    const double scale_min  = log_Q_inv.min();
-    const double scale_max  = log_Q_inv.max();
-    const double scale      = (scale_max + scale_min) / 2.0;
-
-    const Eigen::VectorXd scaled_val = log_Q_inv - scale;
-    const Eigen::VectorXd log_EKQ = (E_regulation * Keq_constant).log() + log_Q_inv;
-    const double q_max = log_Q_inv.abs().max();
-    const double ekq_max = log_EKQ.abs().max();
-
-    Eigen::VectorXd EKQ;
-    if (q_max < ekq_max)
-    {
-        EKQ = E_Regulation * (log_Q_inv.exp() * Keq_constant);
-    }
-    else
-    {
-        EKQ = ((E_Regulation * Keq_constant).log() + log_Q_inv).exp()
-    }
-
-    return EKQ;
 }
 
-[[nodiscard]]
-double derivatives(
-            const Eigen::VectorXd& v_log_counts,
-            const Eigen::VectorXd& f_log_counts,
-            const Eigen::VectorXd& mu0,
-            const Eigen::VectorXd& S_mat,
-            const Eigen::VectorXd& R_back_mat,
-            const Eigen::VectorXd& P_mat, 
-            const Eigen::VectorXd& Keq_constant,
-            const Eigen::VectorXd& E_regulation)
-{
-    const int n_var = v_log_counts.size();
-    const Eigen::VectorXd log_metabolites(v_log_counts.size() + f_log_counts.size());
-    log_metabolites << v_log_counts, f_log_counts;
-
-    Eigen::VectorXd EKQ_f = odds_alternate(
-            E_regulation,
-            log_metabolites,
-            mu0,
-            S_mat,
-            R_back_mat,
-            P_mat,
-            Keq_constant,
-            1);
-
-    Eigen::VectorXd EKQ_r = odds_alternate(
-            E_regulation,
-            log_metabolites,
-            mu0,
-            -S_mat,
-            P_mat,
-            R_back_mat,
-            Keq_constant.inverse(),
-            1);
-
-    Eigen::MatrixXd s_mat = S_mat(all, seqN(0, nvar));
-    Eigen::MatrixXd deriv = s_mat.transpose().dot((EKQ_f - EKQ_r).transpose());
-    return deriv.reshaped(deriv.size(), 1);
-}
 
 /*
  * Driver function for calculating the least squares with the
@@ -151,33 +134,30 @@ double derivatives(
  */
 [[nodiscard]]
 Eigen::Vector2d least_squares(
-            const Eigen::VectorXd& v_log_counts,
-            const double           xtol,
-            const Eigen::VectorXd& f_log_counts,
-            const Eigen::VectorXd& mu0,
             const Eigen::VectorXd& S_mat,
             const Eigen::VectorXd& R_back_mat,
             const Eigen::VectorXd& P_mat, 
             const Eigen::VectorXd& Keq_constant,
-            const Eigen::VectorXd& state)
+            const Eigen::VectorXd& E_Regulation,
+            const Eigen::VectorXd& log_fcounts)
 {
     Eigen::Vector2d x;
     static constexpr int n = 3;
     x.setConstant(n, init_x);
-    LMFunctor lmfn;
+
+    LMFunctor lmfn(
+            S_mat,
+            R_back_mat,
+            P_mat,
+            Keq_constant,
+            E_regulation,
+            log_fcounts);
+
     Eigen::LevenbergMarquardt<LMFunctor> lm(lmfn);
+
     lm.minimize(x);
 
     return x;
-}
-
-[[nodiscard]] static inline
-auto calc_new_enzyme_simple(
-        const Eigen::VectorXd& state,
-        const int& index) -> double
-{
-    double current_e = state[index];
-    return current_e - ( current_e / 5.0 );
 }
 
 #endif

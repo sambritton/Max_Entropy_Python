@@ -41,97 +41,75 @@ namespace py = pybind11;
  */
 void potential_step(
         const int index,
-        Eigen::VectorXd& state,
-        const Eigen::VectorXd& v_log_counts,
-        const Eigen::VectorXd& f_log_counts,
-        const Eigen::VectorXd& mu0,
         const Eigen::VectorXd& S_mat,
         const Eigen::VectorXd& R_back_mat,
         const Eigen::VectorXd& P_mat,
         const Eigen::VectorXd& Keq_constant,
+        const Eigen::VectorXd& E_Regulation,
+        const Eigen::VectorXd& log_fcounts,
         double* returns,
         int tid)
 {
-    (void) index;
-    (void) state;
-    (void) v_log_counts;
-    (void) f_log_counts;
-    (void) mu0;
-    (void) S_mat;
-    (void) R_back_mat;
-    (void) P_mat;
-    (void) Keq_constant;
     std::cout << "--- tid<" << tid << "> potential step being calculated...\n";
-    P_mat << "This should fail!!";
-    /*
-     *  This function shoud run for each reaction (index = 0 : nrxn-1)
-     *  It will apply regulation to the state (enzyme activities) 
-     *  and calculate resulting steady state metabolite concentrations
-     */
 
-    state[index] = calc_new_enzyme_simple(state, index);
-
-    Eigen::Vector2d result = least_squares(
-            v_log_counts,
-            1e-15,
-            f_log_counts,
-            mu0,
+    Eigen::VectorXd result = least_squares(
             S_mat,
             R_back_mat,
             P_mat, 
             Keq_constant,
-            state);
-    /*
-     *  def potential_step(index, other_args):
-     *      React_Choice=index
-     *      
-     *      state, v_log_counts, f_log_counts,\
-     *      mu0, S_mat, R_back_mat, P_mat, \
-     *      delta_increment_for_small_concs, Keq_constant = other_args
-     *      
-     *      newE = max_entropy_functions.calc_new_enzyme_simple(state, React_Choice)
-     *      trial_state_sample = state.copy()#DO NOT MODIFY ORIGINAL STATE
-     *      trial_state_sample[React_Choice] = newE
-     *      new_res_lsq = least_squares(
-     *              max_entropy_functions.derivatives, v_log_counts, method='lm',
-     *              xtol=1e-15, 
-     *              args=(
-     *                  f_log_counts,
-     *                  mu0,
-     *                  S_mat,
-     *                  R_back_mat,
-     *                  P_mat, 
-     *                  delta_increment_for_small_concs,
-     *                  Keq_constant,
-     *                  trial_state_sample
-     *              )
-     *          )
-     */
+            E_Regulation,
+            log_fcounts);
+
     returns[tid] = result(0);
     std::cout << "Returning from tid<" << tid << ">\n";
 }
 
 
-void dispatch(const std::vector<int>& indices, std::vector<Eigen::VectorXd>& variables)
+[[nodiscard]] auto dispatch(
+        const std::vector<int>& indices,
+        std::vector<Eigen::VectorXd>& variables
+        ) -> Eigen::VectorXd
 {
     if constexpr (MY_CPP_STD < CPP11)
     {
         Eigen::initParallel();
     }
-    Eigen::setNbThreads(n_threads);
 
-    assert(variables.size() == 8 && "Did you pass in all 8 variables as numpy arrays?");
-    Eigen::VectorXd& state 		        = variables[0];
-    const Eigen::VectorXd& v_log_counts = variables[1];
-    const Eigen::VectorXd& f_log_counts = variables[2];
-    const Eigen::VectorXd& mu0 			= variables[3];
-    const Eigen::VectorXd& S_mat 		= variables[4];
-    const Eigen::VectorXd& R_back_mat 	= variables[5];
-    const Eigen::VectorXd& P_mat 		= variables[6];
-    const Eigen::VectorXd& Keq_constant = variables[7];
+    // No need for parallelism within Eigen, as each thread will be
+    // using the Eigen library on it's own thread -
+    // unless of course we run in a slurm allocation and we have
+    // enough threads both for each call of potential_step and for
+    // the parallelism within Eigen.
+    //
+    // Eigen::setNbThreads(n_threads);
+
+    assert(variables.size() == 6 && "Did you pass in all 8 variables as numpy arrays?");
+    const Eigen::VectorXd& S_mat 		= variables[0];
+    const Eigen::VectorXd& R_back_mat 	= variables[1];
+    const Eigen::VectorXd& P_mat 		= variables[2];
+    const Eigen::VectorXd& Keq_constant = variables[3];
+    const Eigen::VectorXd& E_Regulation = variables[4];
+    const Eigen::VectorXd& log_fcounts  = variables[5];
     const int n_threads = indices.size();
+    double* returns = new double[n_threads];
 
-    double* returns = (double*)malloc(sizeof(double) * n_threads);
+    for (int tid=0; tid<n_threads; tid++)
+    {
+        potential_step(
+                indices[tid],
+                S_mat,
+                R_back_mat,
+                P_mat,
+                Keq_constant,
+                E_Regulation,
+                log_fcounts,
+                returns,
+                tid);
+    }
+
+    /*
+     * Not used for now... Sequential solver first!
+     *
     std::vector<std::thread> handles(n_threads);
     for (int tid=0; tid<n_threads; tid++)
     {
@@ -152,13 +130,9 @@ void dispatch(const std::vector<int>& indices, std::vector<Eigen::VectorXd>& var
     }
 
     for (auto& th : handles) th.join();
+    */
 
     std::cout << "Graceful exit...\n";
-    /*
-     * which level of granularity of parallelism
-     * will best suit the problem?
-     *
-     */
 }
 
 PYBIND11_MODULE(pstep, m) {
