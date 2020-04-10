@@ -41,11 +41,11 @@ function error_check() {
 
 printenv PYTHON_EXE 2>&1 >/dev/null
 if [ ! $? -eq 0 ]; then
-    which python 2>&1 >/dev/null
+    which python3 2>&1 >/dev/null
     error_check 'No python installation found on path...'
     # User has not defined a python executable...
     # just use the first python on the path
-    PYTHON_EXE=$(which python)
+    PYTHON_EXE=$(which python3)
 fi
 
 PYTHON_VERSION=$($PYTHON_EXE --version 2>&1)
@@ -58,6 +58,11 @@ echo
 
 git submodule init
 git submodule update
+
+echo
+echo Removing old headers
+echo
+rm -rf "$MODDIR/include/*"
 
 if [ "$BUILD" -eq "1" ]; then
     echo
@@ -80,8 +85,9 @@ if [ "$BUILD" -eq "1" ]; then
 
     pushd eigen3
     git checkout 3.3
-    cp -r ./Eigen/ "$MODDIR/include"
-    cp -r ./unsupported/ "$MODDIR/include"
+    git pull
+    cp -r ./Eigen/ "$MODDIR/include/Eigen"
+    cp -r ./unsupported/ "$MODDIR/include/unsupported"
     error_check 'installing eigen3'
     popd
 

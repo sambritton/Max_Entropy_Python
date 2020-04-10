@@ -18,7 +18,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/eigen.h>
 
-#include <Eigen/Dense>
+#include <Eigen/Core>
 
 #include "helper_functions.hpp"
 
@@ -41,12 +41,12 @@ namespace py = pybind11;
  */
 void potential_step(
         const int index,
-        const Eigen::VectorXd& S_mat,
-        const Eigen::VectorXd& R_back_mat,
-        const Eigen::VectorXd& P_mat,
-        const Eigen::VectorXd& Keq_constant,
-        const Eigen::VectorXd& E_Regulation,
-        const Eigen::VectorXd& log_fcounts,
+        Eigen::MatrixXd& S_mat,
+        Eigen::MatrixXd& R_back_mat,
+        Eigen::MatrixXd& P_mat,
+        Eigen::VectorXd& Keq_constant,
+        Eigen::VectorXd& E_Regulation,
+        Eigen::VectorXd& log_fcounts,
         double* returns,
         int tid)
 {
@@ -67,7 +67,12 @@ void potential_step(
 
 [[nodiscard]] auto dispatch(
         const std::vector<int>& indices,
-        std::vector<Eigen::VectorXd>& variables
+        Eigen::MatrixXd& S_mat,
+        Eigen::MatrixXd& R_back_mat,
+        Eigen::MatrixXd& P_mat,
+        Eigen::VectorXd& Keq_constant,
+        Eigen::VectorXd& E_Regulation,
+        Eigen::VectorXd& log_fcounts
         ) -> Eigen::VectorXd
 {
     if constexpr (MY_CPP_STD < CPP11)
@@ -83,14 +88,8 @@ void potential_step(
     //
     // Eigen::setNbThreads(n_threads);
 
-    assert(variables.size() == 6 && "Did you pass in all 8 variables as numpy arrays?");
-    const Eigen::VectorXd& S_mat 		= variables[0];
-    const Eigen::VectorXd& R_back_mat 	= variables[1];
-    const Eigen::VectorXd& P_mat 		= variables[2];
-    const Eigen::VectorXd& Keq_constant = variables[3];
-    const Eigen::VectorXd& E_Regulation = variables[4];
-    const Eigen::VectorXd& log_fcounts  = variables[5];
     const int n_threads = indices.size();
+    Eigen::VectorXd _returns (n_threads);
     double* returns = new double[n_threads];
 
     for (int tid=0; tid<n_threads; tid++)
@@ -110,29 +109,33 @@ void potential_step(
     /*
      * Not used for now... Sequential solver first!
      *
-    std::vector<std::thread> handles(n_threads);
-    for (int tid=0; tid<n_threads; tid++)
-    {
-        handles[tid] = std::thread(
-                potential_step,
-                indices[tid],
-                std::ref(state),
-                std::ref(v_log_counts),
-                std::ref(f_log_counts),
-                std::ref(mu0),
-                std::ref(S_mat),
-                std::ref(R_back_mat),
-                std::ref(P_mat),
-                std::ref(Keq_constant),
-                returns,
-                tid
-            );
-    }
+     std::vector<std::thread> handles(n_threads);
+     for (int tid=0; tid<n_threads; tid++)
+     {
+     handles[tid] = std::thread(
+     potential_step,
+     indices[tid],
+     std::ref(state),
+     std::ref(v_log_counts),
+     std::ref(f_log_counts),
+     std::ref(mu0),
+     std::ref(S_mat),
+     std::ref(R_back_mat),
+     std::ref(P_mat),
+     std::ref(Keq_constant),
+     returns,
+     tid
+     );
+     }
 
-    for (auto& th : handles) th.join();
-    */
+     for (auto& th : handles) th.join();
+     */
+
+    for (int i=0; i<n_threads; i++)
+        _returns(i) = returns[i];
 
     std::cout << "Graceful exit...\n";
+    return _returns;
 }
 
 PYBIND11_MODULE(pstep, m) {
