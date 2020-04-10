@@ -99,13 +99,11 @@ struct lmder_functor : DenseFunctor<double>
         VectorXd log_metabolites(log_vcounts.size() + log_fcounts.size());
         log_metabolites << log_vcounts, log_fcounts;
         
-        // VectorXd metabolites = log_metabolites.exp();
-#define metabolites log_metabolites.exp()
-        // VectorXd metabolites_recip = pow(metabolites, -1.0);
-#define metabolites_recip metabolites.pow(-1.)
+        VectorXd metabolites = log_metabolites.array().exp();
+        VectorXd metabolites_recip = metabolites.array().pow(-1.0);
 
         //nrxn x metabolite_count <= component product from:  (metabolite_count x 1) * (nrxn x metabolite_count)
-        VectorXd S_recip_metab = metabolite_count.cwiseProduct( (-1.0 * S) );
+        VectorXd S_recip_metab = metabolites_recip.cwiseProduct( (-1.0 * S) );
         
         VectorXd log_Q_inv = -1.0 * ( (R * log_metabolites) + (P * log_metabolites));
         VectorXd log_Q = 1.0 * ( (P * log_metabolites) + (R * log_metabolites));

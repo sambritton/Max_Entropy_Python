@@ -424,6 +424,7 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         'Keq_constant': Keq_constant,
     }
 
+    '''
     import sys, os
     shared_lib_dir = './build/potential_step_module/'
     if os.path.isdir(shared_lib_dir):
@@ -432,14 +433,22 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
         from pstep import dispatch
     else:
         print('-- Using Python potential step calculations')
-        def dispatch(inices, variables):
+        def dispatch(indices, variables):
             with Pool() as pool:
                 async_result = pool.starmap(potential_step, zip(indices, repeat(variables.values())))
                 pool.close()
                 pool.join()
+                '''
     
     start = time.time()
-    dispatch(indices, variables)
+    # dispatch(indices, variables)
+    dispatch(indices,
+             S_mat,
+             R_back_mat,
+             P_mat ,
+             Keq_constant,
+             E_Regulation_new,
+             f_log_counts)
     end = time.time()
     
     total = end-start
