@@ -84,8 +84,13 @@ if [ "$BUILD" -eq "1" ]; then
     echo
 
     pushd eigen3
+    git remote remove origin
+    git remote add origin https://gitlab.com/libeigen/eigen.git
+    git pull
     git checkout 3.3
     git pull
+
+    [ -d "$MODDIR/include" ] || mkdir "$MODDIR/include"
     cp -r ./Eigen/ "$MODDIR/include/Eigen"
     cp -r ./unsupported/ "$MODDIR/include/unsupported"
     error_check 'installing eigen3'
