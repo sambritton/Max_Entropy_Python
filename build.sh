@@ -137,7 +137,9 @@ if [ "$TEST" -eq "1" ]; then
     echo
     echo Preparing newest version of tests...
     echo
+    [ -d $OUTPUTDIR/test_cases ] || mkdir $OUTPUTDIR/test_cases
     cp $MODDIR/tests/test_*.py $OUTPUTDIR
+    cp $MODDIR/tests/test_cases/*.p $OUTPUTDIR/test_cases/
 
     echo
     echo -----------TESTING-----------

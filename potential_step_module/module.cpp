@@ -47,7 +47,8 @@ void potential_step(
         Eigen::VectorXd& Keq_constant,
         Eigen::VectorXd& E_Regulation,
         Eigen::VectorXd& log_fcounts,
-        double* returns,
+        Eigen::VectorXd& log_vcounts,
+        Eigen::MatrixXd& returns,
         int tid)
 {
     std::cout << "--- tid<" << tid << "> potential step being calculated...\n";
@@ -58,9 +59,10 @@ void potential_step(
             P_mat, 
             Keq_constant,
             E_Regulation,
-            log_fcounts);
+            log_fcounts,
+            log_vcounts);
 
-    returns[tid] = result(0);
+    returns.row(tid) = result;
     std::cout << "Returning from tid<" << tid << ">\n";
 }
 
@@ -72,8 +74,9 @@ void potential_step(
         Eigen::MatrixXd& P_mat,
         Eigen::VectorXd& Keq_constant,
         Eigen::VectorXd& E_Regulation,
-        Eigen::VectorXd& log_fcounts
-        ) -> Eigen::VectorXd
+        Eigen::VectorXd& log_fcounts,
+        Eigen::VectorXd& log_vcounts
+        ) -> Eigen::MatrixXd
 {
     if constexpr (MY_CPP_STD < CPP11)
     {
@@ -89,8 +92,13 @@ void potential_step(
     // Eigen::setNbThreads(n_threads);
 
     const int n_threads = indices.size();
-    Eigen::VectorXd _returns (n_threads);
-    double* returns = new double[n_threads];
+
+    /*
+     * Returns mxn where:
+     * m = num reactions
+     * n = num variable metabolites
+     */
+    Eigen::MatrixXd returns (S_mat.rows(), S_mat.cols()-log_fcounts.size());
 
     for (int tid=0; tid<n_threads; tid++)
     {
@@ -102,6 +110,7 @@ void potential_step(
                 Keq_constant,
                 E_Regulation,
                 log_fcounts,
+                log_vcounts,
                 returns,
                 tid);
     }
@@ -131,11 +140,8 @@ void potential_step(
      for (auto& th : handles) th.join();
      */
 
-    for (int i=0; i<n_threads; i++)
-        _returns(i) = returns[i];
-
     std::cout << "Graceful exit...\n";
-    return _returns;
+    return returns;
 }
 
 PYBIND11_MODULE(pstep, m) {
