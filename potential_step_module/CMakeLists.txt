@@ -26,3 +26,5 @@ set_target_properties(
     PROPERTIES
         PREFIX "${PYTHON_MODULE_PREFIX}"
         SUFFIX "${PYTHON_MODULE_EXTENSION}")
+
+add_subdirectory(tests)
