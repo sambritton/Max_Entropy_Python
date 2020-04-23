@@ -53,7 +53,6 @@ from multiprocessing import Pool
 from itertools import repeat
 import torch
 
-
 Method2 = 'dogbox'
 Method1 = 'lm'
 Method3 = 'trf'
@@ -406,18 +405,50 @@ def policy_function(nn_model, state, v_log_counts_path, *args ):
     current_reward_vec = np.zeros(num_rxns)
     current_state_vec = np.zeros(num_rxns)
 
-    variables=[nn_model,state, nvar, v_log_counts, f_log_counts,\
-               complete_target_log_counts, A, rxn_flux, KQ_f,\
-               delta_S_metab,\
-               mu0, S_mat, R_back_mat, P_mat, 
-               delta_increment_for_small_concs, Keq_constant]
+    variables = {
+        'nn_model': nn_model,
+        'state': state,
+        'nvar': nvar,
+        'v_log_counts': v_log_counts,
+        'f_log_counts ': f_log_counts ,
+        'complete_target_log_counts': complete_target_log_counts,
+        'A': A,
+        'rxn_flux': rxn_flux,
+        'KQ_f ': KQ_f ,
+        'delta_S_metab ': delta_S_metab ,
+        'mu0': mu0,
+        'S_mat': S_mat,
+        'R_back_mat': R_back_mat,
+        'P_mat ': P_mat ,
+        'delta_increment_for_small_concs': delta_increment_for_small_concs,
+        'Keq_constant': Keq_constant,
+    }
 
-    start = time.time()
+    '''
+    import sys, os
+    shared_lib_dir = './build/potential_step_module/'
+    if os.path.isdir(shared_lib_dir):
+        print('-- Loading C++ potential step calculations')
+        sys.path.append(shared_lib_dir)
+        from pstep import dispatch
+    else:
+        print('-- Using Python potential step calculations')
+        def dispatch(indices, variables):
+            with Pool() as pool:
+                async_result = pool.starmap(potential_step, zip(indices, repeat(variables.values())))
+                pool.close()
+                pool.join()
+                '''
     
-    with Pool() as pool:
-        async_result = pool.starmap(potential_step, zip(indices, repeat(variables)))
-        pool.close()
-        pool.join()
+    start = time.time()
+    # dispatch(indices, variables)
+    dispatch(indices,
+             S_mat,
+             R_back_mat,
+             P_mat ,
+             Keq_constant,
+             E_Regulation_new,
+             f_log_counts)
     end = time.time()
     
     total = end-start

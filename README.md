@@ -30,8 +30,16 @@ Additional Arguments:
 6: epsilon threshold (episodes before eps=eps/2) default 25
 7: gamma (0-1) default 0.9 
 
+To build the C++ module for dispatching parallel runs of potential step calculations on a linux system, run `build.sh`. You will need the packages:
+
+- `python-dev` or `python3-dev`
+- cmake
+
+You can also build manually by copying the needed headers from pybind11 and eigen3 to `potential_step_module/include`.
 
 To run a short simulation, cd to the GLYCOLYSIS_TCA_GOGAT folder. Use the command in one of the batch scripts:
+```bash
 python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION 1 4 0 1e-06 0.05 2 
+```
 
 In Cascade, run "/home/scicons/cascade/apps/python/3.6/bin/python ./GLYCOLYSIS_TCA_GOGAT_FUNCTION.py 1 2"

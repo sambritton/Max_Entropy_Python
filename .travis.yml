@@ -1,0 +1,31 @@
+# Travis CI has no ability to handle 3 langauges (c, c++, python)
+# and it overrides $CC/$CXX if language is set to c/c++ (only one, not both).
+#
+# Set language to python since at least the result of that is something useful.
+language: python
+python:
+    - "3.7"
+# Manage the C/C++ compiler manually
+env:
+    - CC=gcc-7   CXX=g++-7
+    - CC=gcc-9   CXX=g++-9
+
+addons:
+    apt:
+        sources:
+            - ubuntu-toolchain-r-test
+        packages:
+            - gcc-7
+            - g++-7
+            - gcc-9
+            - g++-9
+            - scons
+before_install:
+    - export PATH=$HOME/.local/bin:$HOME/protobuf/bin:$PATH
+    - export MAKEFLAGS=-j$(nproc)
+    - $CC --version
+    - $CXX --version
+    - python --version
+    - lsb_release -a
+
+script: ./build.sh
