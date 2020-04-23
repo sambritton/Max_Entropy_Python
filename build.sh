@@ -6,51 +6,77 @@ TEST=1
 PROJ_ROOT=$(pwd)
 MODDIR=$PROJ_ROOT/potential_step_module
 OUTPUTDIR="$PROJ_ROOT/$BUILDDIR/potential_step_module"
+n_jobs=1
+PYTHON_EXE=""
 
-for i in "$@"
+while [[ $# -gt 0 ]]
 do
-    case $i in
-        --compile-only)
+    case $1 in
+        -c|--compile-only)
             TEST=0
+            shift
             ;;
-        --test-only)
+        -t|--test-only)
             BUILD=0
+            shift
             ;;
+        -n|--num-jobs)
+            n_jobs=$2
+            shift; shift
+            ;;
+        -p|--python)
+            PYTHON_EXE="$2"
+            shift; shift
+            ;;
+        '-h'|'--help')
+            ;&
         *)
             echo
             echo Usage:
             echo To only compile:
-            printf '\t\t--compile-only'
+            printf '\t\t-c|--compile-only'
             echo
             echo To only run tests:
-            printf '\t\t--test-only'
+            printf '\t\t-t|--test-only'
+            echo
+            echo Number of make jobs:
+            printf '\t\t-n|--num-jobs <int>'
+            echo
+            echo Python executable:
+            printf '\t\t--python <path>'
+            echo
+            echo Help:
+            printf '\t\t-h|--help'
             echo
             echo
             exit 1
+            ;;
     esac
 done
 
-function error_check() {
-    if [ ! $? -eq 0 ]; then
-        echo
-        echo "Got error< $1 >"
-        echo
-        exit 1
-    fi
+function error() {
+    echo
+    echo "Got error< $1 >"
+    echo
+    exit 1
 }
 
-printenv PYTHON_EXE 2>&1 >/dev/null
-if [ ! $? -eq 0 ]; then
-    which python3 2>&1 >/dev/null
-    error_check 'No python installation found on path...'
-    # User has not defined a python executable...
-    # just use the first python on the path
-    PYTHON_EXE=$(which python3)
-fi
+[ -z "$PYTHON_EXE" ] && \
+{
+    printenv PYTHON_EXE 2>&1 >/dev/null || \
+    {
+
+        which python3 2>&1 >/dev/null ||
+            error 'No python installation found on path...'
+        # User has not defined a python executable...
+        # just use the first python on the path
+        PYTHON_EXE=$(which python3)
+    }
+}
 
 PYTHON_VERSION=$($PYTHON_EXE --version 2>&1)
-$PYTHON_EXE $MODDIR/tests/is_py3.py
-error_check "Python installation found by script ($PYTHON_VERSION) is less than 3.5"
+$PYTHON_EXE $MODDIR/tests/is_py3.py ||
+	    error "Python installation found by script ($PYTHON_VERSION) is less than 3.5"
 
 echo
 echo Updating submodules...
@@ -69,62 +95,66 @@ if [ "$BUILD" -eq "1" ]; then
     echo Checking for needed programs...
     echo
 
-    type module 2>&1 >/dev/null
-    if [ $? -eq 0 ]; then
+    type module 2>&1 >/dev/null && {
         echo
         echo Loading modules...
         echo
         module load python/3.7.0
         module load cmake
         module load gcc/9.1.0
-    fi
+    }
 
     echo
     echo Installing Eigen headers...
     echo
 
-    pushd eigen3
-    git remote remove origin
-    git remote add origin https://gitlab.com/libeigen/eigen.git
-    git pull
-    git checkout 3.3
-    git pull
+    {
+        pushd eigen3
+        git remote remove origin
+        git remote add origin https://gitlab.com/libeigen/eigen.git
+        git pull
+        git checkout 3.3
+        git pull
 
-    [ -d "$MODDIR/include" ] || mkdir "$MODDIR/include"
-    cp -r ./Eigen/ "$MODDIR/include/Eigen"
-    cp -r ./unsupported/ "$MODDIR/include/unsupported"
-    error_check 'installing eigen3'
-    popd
+        [ -d "$MODDIR/include" ] || mkdir "$MODDIR/include"
+        cp -r ./Eigen/ "$MODDIR/include/Eigen"
+        cp -r ./unsupported/ "$MODDIR/include/unsupported" || error 'installing eigen3'
+        popd
+    } &
 
     echo
     echo Checking pybind11 installation...
     echo
-    if [ ! -d "$MODDIR/include/pybind11" ]
-    then
-        cp -r pybind11/include/pybind11 $MODDIR/include
-    fi
 
-    if [ -d $BUILDDIR ]
-    then
-        echo
-        echo Removing old builds...
-        echo
-        rm -rf $BUILDDIR
-    fi
+    {
+        [ ! -d "$MODDIR/include/pybind11" ] && {
+            cp -r pybind11/include/pybind11 $MODDIR/include
+        }
+    } &
+
+    {
+        if [ -d $BUILDDIR ]
+        then
+            echo
+            echo Removing old builds...
+            echo
+            rm -rf $BUILDDIR
+        fi
+    } &
+
+    wait
 
     echo
     echo Building...
     echo
     mkdir $BUILDDIR
     pushd $BUILDDIR
-    cmake ..
-    error_check 'Could not configure bindings with cmake'
+    cmake .. || error 'Could not configure bindings with cmake'
 
     echo
     echo Compiling...
     echo
-    make
-    error_check 'Could not compile bindings'
+    make -j $n_jobs || error 'Could not compile bindings'
     popd
 fi
 
